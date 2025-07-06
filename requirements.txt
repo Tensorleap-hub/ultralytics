@@ -22,7 +22,7 @@ mkdocstrings
 mkdocs-redirects
 mkdocs-ultralytics-plugin>=0.1.17
 mkdocs-macros-plugin>=1.0.5
-onnx>=1.12.0
+onnx>=1.11.0
 coremltools>=7.0
 scikit-learn>=1.3.2
 openvino>=2024.0.0,<2025.0.0

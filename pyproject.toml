@@ -46,7 +46,7 @@ mkdocs-ultralytics-plugin = ">=0.1.17"
 mkdocs-macros-plugin = ">=1.0.5"
 
 [tool.poetry.group.export.dependencies]
-onnx = ">=1.12.0"
+onnx          = "^1.14.0"
 onnxruntime = ">=1.12.0,<1.17.0"
 coremltools = {version = ">=7.0", markers = "platform_system != 'Windows' and python_version <= '3.11'"}
 scikit-learn = {version = ">=1.3.2", markers = "platform_system != 'Windows' and python_version <= '3.11'"}
