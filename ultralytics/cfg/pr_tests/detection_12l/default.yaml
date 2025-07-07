@@ -9,13 +9,8 @@ tensorleap_path: datasets  #folder where coco dataset folder will be created --T
 tensorleap_use_test: False
 tensorleap_use_unlabeled: False
 # Train settings -------------------------------------------------------------------------------------------------------
-model:  # set to the core of your.h5 model
-  - models/yolo11s.pt
-  - models/yolo12n.pt   # use models with different imp like v10 v6 v7
-
-data: # (str, optional) path to data file, i.e. coco8.yaml
-  - coco128.yaml # data that needs to be downloaded
-  - coco8.yaml  # data that already exists
+model: models/yolo12n.pt  # set to the core of your.h5 model
+data: coco128.yaml # (str, optional) path to data file, i.e. coco8.yaml
 wanted_cls:  # List(str) i.e [person , car , bowl , bed , broccoli], Metadata is calculated individually for each these class.
 epochs: 100 # (int) number of epochs to train for
 time: # (float, optional) number of hours to train for, overrides epochs if supplied
@@ -134,4 +129,4 @@ cfg: # (str, optional) for overriding defaults.yaml
 
 # Tracker settings ------------------------------------------------------------------------------------------------------
 tracker: botsort.yaml # (str) tracker type, choices=[botsort.yaml, bytetrack.yaml]
-tl_pr_testing: False
+tl_pr_testing: True

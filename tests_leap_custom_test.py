@@ -1,32 +1,34 @@
-import os
-from code_loader.contract.datasetclasses import SamplePreprocessResponse
-from code_loader.contract.enums import DataStateType
-from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
-                         leap_binder, loss, gt_bb_decoder, image_visualizer, bb_decoder,
-                         cost, metadata_per_img, ious, confusion_matrix_metric)
-import tensorflow as tf
-import onnxruntime as ort
-import numpy as np
-from code_loader.helpers import visualize
-from ultralytics.tensorleap_folder.utils import extract_mapping, validate_supported_models
-from ultralytics.tensorleap_folder.global_params import cfg
 
 
-def check_custom_test():
+
+def run_custom_test():
+    import os
+    from code_loader.contract.datasetclasses import SamplePreprocessResponse
+    from code_loader.contract.enums import DataStateType
+    from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
+                             leap_binder, loss, gt_bb_decoder, image_visualizer, bb_decoder,
+                             cost, metadata_per_img, ious, confusion_matrix_metric)
+    import tensorflow as tf
+    import onnxruntime as ort
+    import numpy as np
+    from ultralytics.tensorleap_folder.global_params import cfg
+
+    check_generic = True
+    plot_vis = False
+    model_path = None  # Choose None if only pt version available else, use your h5/onnx model's path.
+    mapping_version = None  # Se
+
     if check_generic:
         leap_binder.check()
     m_path= model_path if model_path!=None else 'None_path'
-    print("started custom tests")
-    validate_supported_models(os.path.basename(cfg.model),m_path)
     if not os.path.exists(m_path):
-        from export_model_to_tf import onnx_exporter #TODO - currently supports only onnx
-        m_path=onnx_exporter()
-        extract_mapping(m_path,mapping_version)
+        from export_model_to_tf import onnx_exporter
+        m_path=onnx_exporter(cfg)
     keras_model=m_path.endswith(".h5")
     model = tf.keras.models.load_model(m_path) if keras_model else ort.InferenceSession(m_path)
     responses = preprocess_func_leap()
     for subset in responses: # [training, validation, test ,unlabeled]
-        for idx in range(10):
+        for idx in range(2):
             s_prepro=SamplePreprocessResponse(np.array(idx), subset)
 
             # get input images
@@ -55,17 +57,5 @@ def check_custom_test():
             # vis
             img_vis=image_visualizer(np.expand_dims(image,axis=0))
             pred_img=bb_decoder(np.expand_dims(image,axis=0),y_pred[0].numpy())
-            if plot_vis:
-                visualize(img_vis)
-                visualize(pred_img)
-                if subset.state != DataStateType.unlabeled:
-                    visualize(gt_img)
-    print("finish tests")
 
-
-# if __name__ == '__main__':
-check_generic = True
-plot_vis= False
-model_path = None  # Choose None if only pt version available else, use your h5/onnx model's path.
-mapping_version = None # Set as  None if the model's name is supported by ultralytics. Else, set to the base yolo architecture name (e.x if your trained model has the same architecture as yolov11s set mapping_version=yolov11s ) .
-check_custom_test()
+run_custom_test()

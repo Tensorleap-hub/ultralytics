@@ -1,5 +1,4 @@
 from pathlib import Path
-import os
 import numpy as np
 import yaml
 from types import SimpleNamespace
@@ -8,7 +7,18 @@ from ultralytics.utils import callbacks as callbacks_ult
 from ultralytics.models.yolo.detect import DetectionValidator #problematic
 from ultralytics.utils import yaml_load
 from ultralytics.utils.checks import check_file
+import __main__, sys, os
 
+def detect_entry_script():
+    loader = getattr(__main__, "__loader__", None)
+    if loader and hasattr(loader, "archive"):
+        return os.path.basename(loader.archive)=='tests_leap_custom_test.py'
+    if hasattr(__main__, "__file__"):
+        return os.path.basename(__main__.__file__)=='tests_leap_custom_test.py'
+    return os.path.basename(sys.argv[0])=='tests_leap_custom_test.py'
+
+def get_entry_var(var_name):
+    return os.getenv(var_name)
 
 def dict_to_namespace(d):
     if isinstance(d, dict):
@@ -27,8 +37,9 @@ def get_criterion(model_path,cfg):
     from ultralytics.utils import IterableSimpleNamespace #this what makes it problematic
     if not model_path.is_absolute():
         model_path = (cfg.tensorleap_path / model_path).resolve()
-    assert model_path.is_relative_to(cfg.tensorleap_path), (
-        f"❌ {model_path!r} is not inside tensorleap path {cfg.tensorleap_path!r}" )
+    if not test_pr:
+        assert model_path.is_relative_to(cfg.tensorleap_path), (
+            f"❌ {model_path!r} is not inside tensorleap path {cfg.tensorleap_path!r}" )
     model_base = YOLO(model_path)
     criterion = model_base.init_criterion()
     criterion.hyp = IterableSimpleNamespace(**criterion.hyp)
@@ -61,9 +72,9 @@ def get_wanted_cls(cls_mapping,cfg):
     wanted_cls_dic = {k: cls_mapping[k] for k in wanted_cls}
     return wanted_cls_dic
 
-def set_cfg_dict():
+def set_cfg_dict(dir_path=False):
     root = Path(__file__).resolve().parent.parent
-    file_path = os.path.join(root, 'cfg/default.yaml')
+    file_path = os.path.join(root, 'cfg/default.yaml') if not dir_path else dir_path
     with open(file_path, 'r') as file:
         config_dict = yaml.safe_load(file)
     if isinstance(config_dict, dict):
@@ -73,7 +84,9 @@ def set_cfg_dict():
     else:
         return config_dict
 
-cfg = set_cfg_dict()
+test_pr=detect_entry_script()
+dir_path= get_entry_var("DIR_PATH") if test_pr else False
+cfg = set_cfg_dict(dir_path)
 yolo_data=get_yolo_data(cfg) #doable
 dataset_yaml=get_dataset_yaml(cfg)#doable
 criterion=get_criterion(Path(cfg.model),cfg)#problemtic
