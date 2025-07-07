@@ -5,7 +5,7 @@ import yaml
 from types import SimpleNamespace
 from code_loader.contract.enums import DatasetMetadataType
 from ultralytics.utils import callbacks as callbacks_ult
-from ultralytics.models.yolo.detect import DetectionValidator
+from ultralytics.models.yolo.detect import DetectionValidator #problematic
 from ultralytics.utils import yaml_load
 from ultralytics.utils.checks import check_file
 
@@ -24,7 +24,7 @@ def get_yolo_data(cfg):
 
 def get_criterion(model_path,cfg):
     from ultralytics import YOLO
-    from ultralytics.utils import IterableSimpleNamespace
+    from ultralytics.utils import IterableSimpleNamespace #this what makes it problematic
     if not model_path.is_absolute():
         model_path = (cfg.tensorleap_path / model_path).resolve()
     assert model_path.is_relative_to(cfg.tensorleap_path), (
@@ -74,11 +74,11 @@ def set_cfg_dict():
         return config_dict
 
 cfg = set_cfg_dict()
-yolo_data=get_yolo_data(cfg)
-dataset_yaml=get_dataset_yaml(cfg)
-criterion=get_criterion(Path(cfg.model),cfg)
+yolo_data=get_yolo_data(cfg) #doable
+dataset_yaml=get_dataset_yaml(cfg)#doable
+criterion=get_criterion(Path(cfg.model),cfg)#problemtic
 all_clss=dataset_yaml["names"]
 cls_mapping = {v: k for k, v in all_clss.items()}
 wanted_cls_dic=get_wanted_cls(cls_mapping,cfg)
-predictor=get_predictor_obj(cfg,yolo_data)
+predictor=get_predictor_obj(cfg,yolo_data)#problemtic
 possible_float_like_nan_types={f"count of '{v}' class ({k})": DatasetMetadataType.float   for k, v in all_clss.items()}
