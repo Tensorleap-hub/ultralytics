@@ -1,0 +1,30 @@
+name: PR Test Runner
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pr-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9.18'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install Dependencies with Poetry
+        run: poetry install
+
+      - name: Run PR Tests
+        run: poetry run python ultralytics/tests/tl_pr_testing.py
