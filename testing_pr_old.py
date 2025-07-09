@@ -6,7 +6,7 @@ if __name__ == '__main__':
     tests_dir = os.listdir('ultralytics/cfg/pr_tests')
     dodo_path=r'tests_leap_custom_test.py'
     for test in tests_dir:
-        DIR_PATH = os.path.join('ultralytics/cfg/pr_tests', test, "default.yaml")
+        DIR_PATH = os.path.join('ultralytics/cfg/pr_tests', test, "tl_default.yaml")
         env = os.environ.copy()  # inherit parent vars
         env["DIR_PATH"] = str(DIR_PATH)
         try:

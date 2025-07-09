@@ -1000,7 +1000,7 @@ def copy_default_cfg():
 
     Examples:
         >>> copy_default_cfg()
-        # Output: default.yaml copied to /path/to/current/directory/default_copy.yaml
+        # Output: tl_default.yaml copied to /path/to/current/directory/default_copy.yaml
         # Example YOLO command with this new custom cfg:
         #   yolo cfg='/path/to/current/directory/default_copy.yaml' imgsz=320 batch=8
 

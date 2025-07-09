@@ -1,22 +1,48 @@
 from code_loader.contract.datasetclasses import SamplePreprocessResponse
 from code_loader.contract.enums import DataStateType
-from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
-                         leap_binder, loss, gt_bb_decoder, image_visualizer, bb_decoder,
-                         cost, metadata_per_img, ious, confusion_matrix_metric)
-import tensorflow as tf
-import onnxruntime as ort
-from code_loader.helpers import visualize
-from ultralytics.tensorleap_folder.utils import extract_mapping, validate_supported_models
-from ultralytics.tensorleap_folder.global_params import cfg
+from code_loader import leap_binder
+from code_loader.contract.datasetclasses import PreprocessResponse, DataStateType, SamplePreprocessResponse, \
+    ConfusionMatrixElement
+from code_loader.contract.enums import LeapDataType, MetricDirection, ConfusionMatrixValue
+from code_loader.visualizers.default_visualizers import LeapImage
+from code_loader.inner_leap_binder.leapbinder_decorators import (tensorleap_preprocess, tensorleap_gt_encoder,
+                                                                 tensorleap_input_encoder, tensorleap_metadata,
+                                                                 tensorleap_custom_visualizer)
+from code_loader.contract.responsedataclasses import BoundingBox
+from code_loader.contract.visualizer_classes import LeapImageWithBBox
+from code_loader.utils import rescale_min_max
+from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric
+
+
 import yaml
 from types import SimpleNamespace
 from code_loader.contract.enums import DatasetMetadataType
+from coremltools.converters.mil.testing_reqs import tf
+
 from ultralytics.utils import yaml_load
 from ultralytics.utils.checks import check_file
 import __main__, sys
 
 
-def check_custom_test():
+
+import os
+import re
+import shutil
+from pathlib import Path
+
+import numpy as np
+import torch
+from code_loader.contract.datasetclasses import PreprocessResponse
+from ultralytics.utils.plotting import output_to_target #change to our version
+
+
+
+
+
+
+
+
+def create_mapping_and_test():
     if check_generic:
         leap_binder.check()
     m_path= model_path if model_path!=None else 'None_path'
@@ -110,7 +136,7 @@ def get_wanted_cls(cls_mapping,cfg):
 
 def set_cfg_dict(dir_path=False):
     root = Path(__file__).resolve().parent.parent
-    file_path = os.path.join(root, 'cfg/default.yaml') if not dir_path else dir_path
+    file_path = os.path.join(root, 'cfg/tl_default.yaml') if not dir_path else dir_path
     with open(file_path, 'r') as file:
         config_dict = yaml.safe_load(file)
     if isinstance(config_dict, dict):
@@ -120,37 +146,19 @@ def set_cfg_dict(dir_path=False):
     else:
         return config_dict
 
-def set_global_params(cfg):
+def set_global_params():
     test_pr=detect_entry_script()
     dir_path= get_entry_var("DIR_PATH") if test_pr else False
     cfg = set_cfg_dict(dir_path)
-    yolo_data=get_yolo_data(cfg) #doable
     dataset_yaml=get_dataset_yaml(cfg)#doable
-    criterion=get_criterion(Path(cfg.model),cfg)#problemtic
     all_clss=dataset_yaml["names"]
     cls_mapping = {v: k for k, v in all_clss.items()}
     wanted_cls_dic=get_wanted_cls(cls_mapping,cfg)
-    predictor=get_predictor_obj(cfg,yolo_data)#problemtic
     possible_float_like_nan_types={f"count of '{v}' class ({k})": DatasetMetadataType.float   for k, v in all_clss.items()}
+    return test_pr,cfg,all_clss,wanted_cls_dic,possible_float_like_nan_types
 
 
 
-import os
-import re
-import shutil
-from pathlib import Path
-
-import numpy as np
-import torch
-from code_loader.contract.datasetclasses import PreprocessResponse
-from ultralytics.data import  build_yolo_dataset#problemtic
-from ultralytics.utils.plotting import output_to_target #doable
-
-
-def create_data_with_ult(cfg,yolo_data, phase='val'):
-    n_samples = len(os.listdir(yolo_data[phase]))
-    dataset = build_yolo_dataset(cfg, yolo_data[phase],n_samples , yolo_data, mode='val', stride=32)
-    return dataset, n_samples
 
 def pre_process_dataloader(preprocessresponse:PreprocessResponse, idx, predictor):
     batch= preprocessresponse.data['dataloader'][idx]
@@ -278,4 +286,4 @@ if __name__ == '__main__':
     plot_vis= False
     model_path = None  # Choose None if only pt version available else, use your h5/onnx model's path.
     mapping_version = None # Set as  None if the model's name is supported by ultralytics. Else, set to the base yolo architecture name (e.x if your trained model has the same architecture as yolov11s set mapping_version=yolov11s ) .
-    check_custom_test()
+    # check_custom_test()

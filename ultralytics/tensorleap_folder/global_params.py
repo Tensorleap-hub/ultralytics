@@ -74,7 +74,7 @@ def get_wanted_cls(cls_mapping,cfg):
 
 def set_cfg_dict(dir_path=False):
     root = Path(__file__).resolve().parent.parent
-    file_path = os.path.join(root, 'cfg/default.yaml') if not dir_path else dir_path
+    file_path = os.path.join(root, 'cfg/tl_default.yaml') if not dir_path else dir_path
     with open(file_path, 'r') as file:
         config_dict = yaml.safe_load(file)
     if isinstance(config_dict, dict):

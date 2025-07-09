@@ -12,7 +12,7 @@ def main():
     test_script = SCRIPT_DIR/ 'tests_leap_custom_test.py'
 
     for test_case in os.listdir(test_root):
-        test_path = os.path.join(test_root, test_case, 'default.yaml')
+        test_path = os.path.join(test_root, test_case, 'tl_default.yaml')
         env = os.environ.copy()
         env['DIR_PATH'] = test_path
 

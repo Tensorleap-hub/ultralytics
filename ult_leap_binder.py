@@ -1,13 +1,18 @@
+import os
+
 import torch
-from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric
-from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss,possible_float_like_nan_types,wanted_cls_dic, predictor
-from ultralytics.tensorleap_folder.utils import create_data_with_ult, pre_process_dataloader, \
-    update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs
 from typing import List, Dict, Union
 import numpy as np
+import tensorflow as tf
+import onnxruntime as ort
+from code_loader.helpers import visualize
+
+from ult_utils import get_global_params
+from ult_utils import create_data_with_ult, pre_process_dataloader, \
+    update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, validate_supported_models, extract_mapping, onnx_exporter
+
 from code_loader import leap_binder
-from code_loader.contract.datasetclasses import PreprocessResponse, DataStateType, SamplePreprocessResponse, \
-    ConfusionMatrixElement
+from code_loader.contract.datasetclasses import PreprocessResponse, ConfusionMatrixElement
 from code_loader.contract.enums import LeapDataType, MetricDirection, ConfusionMatrixValue
 from code_loader.visualizers.default_visualizers import LeapImage
 from code_loader.inner_leap_binder.leapbinder_decorators import (tensorleap_preprocess, tensorleap_gt_encoder,
@@ -16,9 +21,18 @@ from code_loader.inner_leap_binder.leapbinder_decorators import (tensorleap_prep
 from code_loader.contract.responsedataclasses import BoundingBox
 from code_loader.contract.visualizer_classes import LeapImageWithBBox
 from code_loader.utils import rescale_min_max
+from code_loader.contract.datasetclasses import SamplePreprocessResponse
+from code_loader.contract.enums import DataStateType
+from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric
+
+
 from ultralytics.utils.plotting import output_to_target #doable
 from ultralytics.utils.metrics import box_iou #doable
 
+
+# TODO-  fix the connection between where the data is saved to where the models are saved
+
+dir_path, cfg, yolo_data, dataset_yaml, criterion, all_clss, cls_mapping, wanted_cls_dic, predictor, possible_float_like_nan_types=get_global_params()
 
 # ----------------------------------------------------data processing---------------------------------------------------
 
@@ -267,6 +281,62 @@ def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResp
 
 
 
+
+def run_inference(
+        check_generic = True,
+        plot_vis = True,
+        model_path = None , # Choose None if only pt version available else, use your h5/onnx model's path.
+        mapping_version = None
+                   ):
+        if check_generic:
+            leap_binder.check()
+        m_path = model_path if model_path != None else 'None_path'
+        print("started custom tests")
+        validate_supported_models(os.path.basename(cfg.model), m_path)
+        if not os.path.exists(m_path):
+            m_path = onnx_exporter(cfg)
+            extract_mapping(m_path, mapping_version)
+        keras_model = m_path.endswith(".h5")
+        model = tf.keras.models.load_model(m_path) if keras_model else ort.InferenceSession(m_path)
+        responses = preprocess_func_leap()
+        for subset in responses:  # [training, validation, test ,unlabeled]
+            for idx in range(4):
+                s_prepro = SamplePreprocessResponse(np.array(idx), subset)
+
+                # get input images
+                image = input_encoder(idx, subset)
+                concat = np.expand_dims(image, axis=0)
+
+                # predict
+                y_pred = model([concat]) if keras_model else model.run(None, {model.get_inputs()[0].name: concat})
+                if not keras_model:
+                    y_pred = [tf.convert_to_tensor(p) for p in y_pred]
+                if subset.state != DataStateType.unlabeled:
+                    # get gt
+                    gt = gt_encoder(idx, subset)
+                    gt_img = gt_bb_decoder(np.expand_dims(image, axis=0), np.expand_dims(gt, axis=0))
+
+                    # custom metrics
+                    total_loss = loss(y_pred[1].numpy(), y_pred[2].numpy(), y_pred[3].numpy(),
+                                      np.expand_dims(gt, axis=0), y_pred[0].numpy())
+                    cost_dic = cost(y_pred[1].numpy(), y_pred[2].numpy(), y_pred[3].numpy(), np.expand_dims(gt, axis=0))
+                    iou = ious(y_pred[0].numpy(), s_prepro)
+                    conf_mat = confusion_matrix_metric(y_pred[0].numpy(), s_prepro)
+
+                # metadata
+                meta_data = metadata_per_img(idx, subset)
+
+                # vis
+                img_vis = image_visualizer(np.expand_dims(image, axis=0))
+                pred_img = bb_decoder(np.expand_dims(image, axis=0), y_pred[0].numpy())
+                if plot_vis:
+                    visualize(img_vis)
+                    visualize(pred_img)
+                    if subset.state != DataStateType.unlabeled:
+                        visualize(gt_img)
+        print("finish tests")
+
+
 # ---------------------------------------------------------main------------------------------------------------------
 
 
@@ -277,5 +347,6 @@ leap_binder.add_prediction(name='concatenate_40', labels=[str(i) for i in range(
 leap_binder.add_prediction(name='concatenate_80', labels=[str(i) for i in range(80)], channel_dim=-1)
 
 if __name__ == '__main__':
+    run_inference(cfg)
     leap_binder.check()
 

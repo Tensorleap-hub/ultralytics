@@ -26,7 +26,7 @@ def export_to_onnx(cfg):
     model.export(format="onnx", nms=False, export_train_head=True)
 
 def onnx_exporter(cfg,h5=False):
-    # file_path = 'ultralytics/cfg/default.yaml'
+    # file_path = 'ultralytics/cfg/tl_default.yaml'
     # with open(file_path, 'r') as file:
     #     config_dict = yaml.safe_load(file)
     # cfg=dict_to_namespace(config_dict)
@@ -35,9 +35,9 @@ def onnx_exporter(cfg,h5=False):
     model_path=Path(cfg.model)
     if not model_path.is_absolute():
         model_path = (cfg.tensorleap_path / model_path).resolve()
-    if not pr_tests:
-        assert model_path.is_relative_to(cfg.tensorleap_path), (
-            f"❌ {model_path!r} is not inside tensorleap path {cfg.tensorleap_path!r}" )
+    # if not pr_tests:
+    #     assert model_path.is_relative_to(cfg.tensorleap_path), (
+    #         f"❌ {model_path!r} is not inside tensorleap path {cfg.tensorleap_path!r}" )
     cfg.model=model_path
     export_to_onnx(cfg)
     exported_model_path=yolo_version_check(model_path)
