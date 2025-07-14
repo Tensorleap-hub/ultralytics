@@ -63,9 +63,9 @@ def check_custom_test():
     print("finish tests")
 
 
-# if __name__ == '__main__':
-check_generic = True
-plot_vis= False
-model_path = None  # Choose None if only pt version available else, use your h5/onnx model's path.
-mapping_version = None # Set as  None if the model's name is supported by ultralytics. Else, set to the base yolo architecture name (e.x if your trained model has the same architecture as yolov11s set mapping_version=yolov11s ) .
-check_custom_test()
+if __name__ == '__main__':
+    check_generic = True
+    plot_vis= False
+    model_path = None  # Choose None if only pt version available else, use your h5/onnx model's path.
+    mapping_version = None # Set as  None if the model's name is supported by ultralytics. Else, set to the base yolo architecture name (e.x if your trained model has the same architecture as yolov11s set mapping_version=yolov11s ) .
+    check_custom_test()

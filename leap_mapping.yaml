@@ -3,62 +3,80 @@ decorators:
     data:
       type: Input
       output_name: image
-    id: '144'
+    id: '161'
     inputs: {}
     outputs:
       image:
         - inputKey: input
           operation: ZeroPadding2D
           name: model.0/conv/Conv_tl_conv_pad_1
-          id: '143'
+          id: '160'
         - inputKey: image
           operation: Visualizer
-          id: '1103'
+          id: '485'
         - inputKey: image
           operation: Visualizer
-          id: '1104'
+          id: '486'
         - inputKey: image
           operation: Visualizer
-          id: '1105'
+          id: '487'
   - operation: CustomLoss
     data:
+      type: CustomLoss
+      name: total_loss
+      selected: total_loss
+      user_unique_name: total_loss
       arg_names:
         - pred80
         - pred40
         - pred20
         - gt
         - demo_pred
-      user_unique_name: total_loss
-      name: total_loss
-      selected: total_loss
-      type: CustomLoss
-    id: '1098'
+    id: '479'
     inputs:
       pred80:
         - outputKey: merged
           operation: Concatenate
-          name: model.23/Concat_tl_concat_2
+          name: model.24/Concat_tl_concat_2
           id: '18'
       pred40:
         - outputKey: merged
           operation: Concatenate
-          name: model.23/Concat_1_tl_concat_2
-          id: '802'
+          name: model.24/Concat_1_tl_concat_2
+          id: '343'
       pred20:
         - outputKey: merged
           operation: Concatenate
-          name: model.23/Concat_2_tl_concat_2
-          id: '948'
+          name: model.24/Concat_2_tl_concat_2
+          id: '409'
       demo_pred:
         - outputKey: merged
           operation: Concatenate
-          name: model.23/Concat_5_tl_concat_2
+          name: model.24/Concat_5_tl_concat_2
           id: '1'
       gt:
         - outputKey: classes
           operation: GroundTruth
-          id: '1101'
+          id: '481'
     outputs: {}
+  - operation: GroundTruth
+    data:
+      type: GroundTruth
+      output_name: classes
+      selected: classes
+    id: '481'
+    inputs: {}
+    outputs:
+      classes:
+        - inputKey: gt
+          operation: CustomLoss
+          id: '479'
+        - inputKey: gt
+          operation: Metric
+          id: '483'
+        - inputKey: bb_gt
+          operation: Visualizer
+          id: '487'
   - operation: Metric
     data:
       type: Metric
@@ -67,12 +85,12 @@ decorators:
       arg_names:
         - y_pred
       user_unique_name: Confusion Matrix
-    id: '1099'
+    id: '482'
     inputs:
       y_pred:
         - outputKey: merged
           operation: Concatenate
-          name: model.23/Concat_5_tl_concat_2
+          name: model.24/Concat_5_tl_concat_2
           id: '1'
     outputs: {}
   - operation: Metric
@@ -86,46 +104,28 @@ decorators:
         - pred20
         - gt
       user_unique_name: cost
-    id: '1100'
+    id: '483'
     inputs:
       pred80:
         - outputKey: merged
           operation: Concatenate
-          name: model.23/Concat_tl_concat_2
+          name: model.24/Concat_tl_concat_2
           id: '18'
       pred40:
         - outputKey: merged
           operation: Concatenate
-          name: model.23/Concat_1_tl_concat_2
-          id: '802'
+          name: model.24/Concat_1_tl_concat_2
+          id: '343'
       pred20:
         - outputKey: merged
           operation: Concatenate
-          name: model.23/Concat_2_tl_concat_2
-          id: '948'
+          name: model.24/Concat_2_tl_concat_2
+          id: '409'
       gt:
         - outputKey: classes
           operation: GroundTruth
-          id: '1101'
+          id: '481'
     outputs: {}
-  - operation: GroundTruth
-    data:
-      type: GroundTruth
-      output_name: classes
-      selected: classes
-    id: '1101'
-    inputs: {}
-    outputs:
-      classes:
-        - inputKey: gt
-          operation: Metric
-          id: '1100'
-        - inputKey: bb_gt
-          operation: Visualizer
-          id: '1105'
-        - inputKey: gt
-          operation: CustomLoss
-          id: '1098'
   - operation: Metric
     data:
       type: Metric
@@ -134,12 +134,12 @@ decorators:
       arg_names:
         - y_pred
       user_unique_name: ious
-    id: '1102'
+    id: '484'
     inputs:
       y_pred:
         - outputKey: merged
           operation: Concatenate
-          name: model.23/Concat_5_tl_concat_2
+          name: model.24/Concat_5_tl_concat_2
           id: '1'
     outputs: {}
   - operation: Visualizer
@@ -152,17 +152,17 @@ decorators:
         - image
         - predictions
       user_unique_name: bb_decoder
-    id: '1103'
+    id: '485'
     inputs:
       predictions:
         - outputKey: merged
           operation: Concatenate
-          name: model.23/Concat_5_tl_concat_2
+          name: model.24/Concat_5_tl_concat_2
           id: '1'
       image:
         - outputKey: image
           operation: Input
-          id: '144'
+          id: '161'
     outputs: {}
   - operation: Visualizer
     data:
@@ -173,12 +173,12 @@ decorators:
       arg_names:
         - image
       user_unique_name: image_visualizer
-    id: '1104'
+    id: '486'
     inputs:
       image:
         - outputKey: image
           operation: Input
-          id: '144'
+          id: '161'
     outputs: {}
   - operation: Visualizer
     data:
@@ -190,15 +190,15 @@ decorators:
         - image
         - bb_gt
       user_unique_name: bb_gt_decoder
-    id: '1105'
+    id: '487'
     inputs:
       image:
         - outputKey: image
           operation: Input
-          id: '144'
+          id: '161'
       bb_gt:
         - outputKey: classes
           operation: GroundTruth
-          id: '1101'
+          id: '481'
     outputs: {}
 layers: []

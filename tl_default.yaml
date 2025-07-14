@@ -5,11 +5,11 @@
 
 task: detect  # add more supported tasks when available # (str) YOLO task, i.e. detect, segment, classify, pose, obb
 mode: val # (str) YOLO mode, i.e. train, val, predict, export, track, benchmark
-tensorleap_path: datasets  #folder where coco dataset folder will be created --TENSORLEAP FLAG
+tensorleap_path:  /Users/yamtawachi/tensorleap/datasets  #folder where coco dataset folder will be created --TENSORLEAP FLAG
 tensorleap_use_test: False
 tensorleap_use_unlabeled: False
 # Train settings -------------------------------------------------------------------------------------------------------
-model: models/yolo11l.pt
+model: models/yolov5su.pt
 data: coco8.yaml # data that needs to be downloaded
 wanted_cls:  # List(str) i.e [person , car , bowl , bed , broccoli], Metadata is calculated individually for each these class.
 epochs: 100 # (int) number of epochs to train for
