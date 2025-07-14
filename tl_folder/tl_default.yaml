@@ -9,7 +9,7 @@ tensorleap_path:  /Users/yamtawachi/tensorleap/datasets  #folder where coco data
 tensorleap_use_test: False
 tensorleap_use_unlabeled: False
 # Train settings -------------------------------------------------------------------------------------------------------
-model: models/yolov5su.pt
+model: models/yolo12s.pt
 data: coco8.yaml # data that needs to be downloaded
 wanted_cls:  # List(str) i.e [person , car , bowl , bed , broccoli], Metadata is calculated individually for each these class.
 epochs: 100 # (int) number of epochs to train for

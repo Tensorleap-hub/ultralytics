@@ -30,7 +30,6 @@ from ultralytics.utils.plotting import output_to_target #doable
 from ultralytics.utils.metrics import box_iou #doable
 
 
-# TODO-  fix the connection between where the data is saved to where the models are saved
 
 dir_path, cfg, yolo_data, dataset_yaml, criterion, all_clss, cls_mapping, wanted_cls_dic, predictor, possible_float_like_nan_types=get_global_params()
 
