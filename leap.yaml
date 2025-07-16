@@ -1,5 +1,5 @@
-codeIntegrationId: 68752cb9e56b06f5cc525784
-projectId: 68752cb4e56b06f5cc52577e
+codeIntegrationId: 6877a27a2d46305be23b1321
+projectId: 6877a2742d46305be23b131b
 secretId: ""
 branch: master
 entryFile: tl_folder/leap_binder.py
@@ -40,5 +40,5 @@ include:
     - ultralytics/trackers/*.md
     - ultralytics/utils/*.py
     - ultralytics/utils/**/*.py
-    - tl_folder/requirements.txt
-pythonVersion: py39
+    - requirements.txt
+pythonVersion: py38

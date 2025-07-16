@@ -2,15 +2,13 @@
 from code_loader.contract.enums import DatasetMetadataType
 from ultralytics.utils import callbacks as callbacks_ult, ops
 from ultralytics.models.yolo.detect import DetectionValidator #problematic
-# from ultralytics.utils import yaml_load
 from ultralytics.utils.checks import check_file
 from ultralytics import YOLO
 from ultralytics.utils import IterableSimpleNamespace  # this what makes it problematic
 from ultralytics.data import  build_yolo_dataset#problemtic
-# from ultralytics.utils.plotting import output_to_target #doable
 
 
-import __main__, sys, os
+import __main__, sys
 import os
 import shutil
 import numpy as np
@@ -197,7 +195,7 @@ def extract_mapping(m_path,mapping_version):
     if not model_type or not os.path.exists(source_file):
         print(f"No Mapping for {m_path} was found, put your mapping in the root directory and check if it is supported.")
     else:
-        destination_file = root/ 'leap_mapping.yaml'
+        destination_file = root.parent/ 'leap_mapping.yaml'
         shutil.copy(source_file, destination_file)
         print(f"Extracting mapping for {model_type} completed")
 

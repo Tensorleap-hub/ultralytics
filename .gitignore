@@ -26,7 +26,7 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-requirements.txt
+tl_folder/requirements.txt
 setup.py
 ultralytics.egg-info
 

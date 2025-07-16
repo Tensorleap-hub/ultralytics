@@ -1,12 +1,6 @@
-import os
-
 import torch
 from typing import List, Dict, Union
 import numpy as np
-import tensorflow as tf
-import onnxruntime as ort
-from code_loader.helpers import visualize
-
 from ult_utils import create_data_with_ult, pre_process_dataloader, \
     update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, validate_supported_models, extract_mapping, onnx_exporter, output_to_target, get_global_params
 
@@ -285,6 +279,11 @@ def run_inference(
         model_path = None , # Choose None if only pt version available else, use your h5/onnx model's path.
         mapping_version = None
                    ):
+        import tensorflow as tf
+        import onnxruntime as ort
+        import os
+        from code_loader.helpers import visualize
+
         if check_generic:
             leap_binder.check()
         m_path = model_path if model_path != None else 'None_path'

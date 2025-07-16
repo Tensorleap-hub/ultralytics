@@ -409,7 +409,10 @@ class Exporter:
                 m.export = True
             if isinstance(m, (Detect, RTDETRDecoder)):  # includes all Detect subclasses like Segment, Pose, OBB
                 m.dynamic = self.args.dynamic
-                m.export = True
+                if hasattr(self.args, 'export_train_head'): # TODO- added by tl
+                    m.export = not self.args.export_train_head
+                else:
+                    m.export = True
                 m.format = self.args.format
                 m.max_det = self.args.max_det
                 m.xyxy = self.args.nms and not coreml
@@ -785,7 +788,7 @@ class Exporter:
                 asset = f"pnnx-{release}-{system}.zip"
                 LOGGER.warning(f"{prefix} PNNX GitHub assets not found: {e}, using default {asset}")
             unzip_dir = safe_download(f"https://github.com/pnnx/pnnx/releases/download/{release}/{asset}", delete=True)
-            if check_is_path_safe(Path.cwd(), unzip_dir):  # avoid path traversal security vulnerability
+            if check_is_path_safe(Path(__file__), unzip_dir):  # avoid path traversal security vulnerability
                 shutil.move(src=unzip_dir / name, dst=pnnx)  # move binary to ROOT
                 pnnx.chmod(0o777)  # set read, write, and execute permissions for everyone
                 shutil.rmtree(unzip_dir)  # delete unzip dir

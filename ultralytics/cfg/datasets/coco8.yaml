@@ -12,7 +12,8 @@
 path: coco8 # dataset root dir
 train: images/train # train images (relative to 'path') 4 images
 val: images/val # val images (relative to 'path') 4 images
-test: # test images (optional)
+test:  images/train2017 # test images (optional)
+unlabeled:  images/train2017
 
 # Classes
 names:
