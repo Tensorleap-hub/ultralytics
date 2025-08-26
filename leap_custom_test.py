@@ -31,7 +31,7 @@ def check_custom_test():
 
             # get input images
             image = input_encoder(idx, subset)
-            concat = np.expand_dims(image, axis=0)
+            concat =image
 
             # predict
             y_pred = model([concat]) if keras_model else model.run(None, {model.get_inputs()[0].name: concat})
@@ -41,11 +41,11 @@ def check_custom_test():
 
                 # get gt
                 gt = gt_encoder(idx, subset)
-                gt_img = gt_bb_decoder(np.expand_dims(image, axis=0), np.expand_dims(gt, axis=0))
+                gt_img = gt_bb_decoder(image, gt)
 
                 # custom metrics
-                total_loss=loss(y_pred[1].numpy(),y_pred[2].numpy(),y_pred[3].numpy(),np.expand_dims(gt,axis=0), y_pred[0].numpy())
-                cost_dic=cost(y_pred[1].numpy(),y_pred[2].numpy(),y_pred[3].numpy(),np.expand_dims(gt,axis=0))
+                total_loss=loss(y_pred[1].numpy(),y_pred[2].numpy(),y_pred[3].numpy(),gt, y_pred[0].numpy())
+                cost_dic=cost(y_pred[1].numpy(),y_pred[2].numpy(),y_pred[3].numpy(),gt)
                 iou=ious(y_pred[0].numpy(), s_prepro)
                 conf_mat = confusion_matrix_metric(y_pred[0].numpy(), s_prepro)
 
@@ -53,8 +53,8 @@ def check_custom_test():
             meta_data=metadata_per_img(idx, subset)
 
             # vis
-            img_vis=image_visualizer(np.expand_dims(image,axis=0))
-            pred_img=bb_decoder(np.expand_dims(image,axis=0),y_pred[0].numpy())
+            img_vis=image_visualizer(image)
+            pred_img=bb_decoder(image,y_pred[0].numpy())
             if plot_vis:
                 visualize(img_vis)
                 visualize(pred_img)
