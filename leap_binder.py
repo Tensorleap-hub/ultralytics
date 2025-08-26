@@ -86,6 +86,7 @@ def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str,
     gt_data = gt_encoder(idx, data)
     cls_gt = np.expand_dims(gt_data[:, 4], axis=1)
     bbox_gt = gt_data[:, :4]
+    print(f"bbox_gt {bbox_gt.shape}")
     clss_info = np.unique(cls_gt, return_counts=True)
     count_dict = update_dict_count_cls(all_clss, clss_info,nan_default_value)
     areas, aspect_ratios = bbox_area_and_aspect_ratio(bbox_gt, data.data['dataloader'][idx]['resized_shape'])
@@ -143,7 +144,7 @@ def image_visualizer(image: np.ndarray) -> LeapImage:
 @tensorleap_custom_visualizer("bb_decoder", LeapDataType.ImageWithBBox)
 def bb_decoder(image: np.ndarray, predictions: np.ndarray) -> LeapImageWithBBox:
     image=image.squeeze(0)
-    y_pred = predictor.postprocess(torch.from_numpy(predictions))
+    y_pred = predictor.postprocess(torch.from_numpy(predictions.copy()))
     _, cls_temp, bbx_temp, conf_temp = output_to_target(y_pred, max_det=predictor.args.max_det)
     t_pred = np.concatenate([bbx_temp, np.expand_dims(conf_temp, 1), np.expand_dims(cls_temp, 1)], axis=1)
     post_proc_pred = t_pred[t_pred[:, 4] >  (getattr(cfg, "conf", 0.25) or 0.25)]
@@ -163,7 +164,7 @@ def ious(y_pred: np.ndarray,preprocess: SamplePreprocessResponse):
     batch["ori_shape"] = (batch["ori_shape"],)
     batch["ratio_pad"] = (batch["ratio_pad"],)
     batch["img"]       = batch["img"].unsqueeze(0)
-    pred = predictor.postprocess(torch.from_numpy(y_pred))[0]
+    pred = predictor.postprocess(torch.from_numpy(y_pred.copy()))[0]
     predictor.seen, predictor.args.plots, predictor.stats = 0, False, {"tp": []}
     pbatch = predictor._prepare_batch(0, batch)
     wanted_mask = np.isin(pbatch['cls'].numpy(),
@@ -219,7 +220,7 @@ def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResp
     batch["ori_shape"]=(batch["ori_shape"],)
     batch["ratio_pad"]= (batch["ratio_pad"],)
     batch["img"]=batch["img"].unsqueeze(0)
-    pred = predictor.postprocess(torch.from_numpy(y_pred))[0]
+    pred = predictor.postprocess(torch.from_numpy(y_pred.copy()))[0]
     predictor.seen=0
     predictor.args.plots=False
     predictor.stats={}
