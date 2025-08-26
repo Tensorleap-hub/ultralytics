@@ -803,13 +803,13 @@ testing = ["pytest (>=7.2.1)", "pytest-cov (>=4.0.0)", "tox (>=4.4.3)"]
 
 [[package]]
 name = "code-loader"
-version = "1.0.84"
+version = "1.0.108"
 description = ""
 optional = false
 python-versions = "<3.12,>=3.8"
 files = [
-    {file = "code_loader-1.0.84-py3-none-any.whl", hash = "sha256:87c997963a0196f7107aa42b2f7ce53fbe462ae8d8a57faf34b0fe8c2c64f0d2"},
-    {file = "code_loader-1.0.84.tar.gz", hash = "sha256:f3e3a6429a63dfe9f5c54c7f6ea980063deacd829f51355e98470971846d0ac6"},
+    {file = "code_loader-1.0.108-py3-none-any.whl", hash = "sha256:14cd1f0460d081022f0d69eaf5d9f72f3f22392d836ea1e103a1f003819f419b"},
+    {file = "code_loader-1.0.108.tar.gz", hash = "sha256:be8248b4bc1745b97da380c743b5e29c89f009e8b3c661fae5f875d300ea0a89"},
 ]
 
 [package.dependencies]
@@ -820,13 +820,13 @@ requests = ">=2.32.3,<3.0.0"
 
 [[package]]
 name = "code-loader-helpers"
-version = "1.0.20"
+version = "1.0.21"
 description = ""
 optional = false
 python-versions = "<3.11,>=3.8"
 files = [
-    {file = "code_loader_helpers-1.0.20-py3-none-any.whl", hash = "sha256:86be20c198e661ed742fa8246d5d87dfbc1c82b96f9d7a9ddccb9dc4e22aa639"},
-    {file = "code_loader_helpers-1.0.20.tar.gz", hash = "sha256:a39fe1cc0858e8fb19df3f8b4ff5be075db0f0c8a7429c24b8a09970d75f82c6"},
+    {file = "code_loader_helpers-1.0.21-py3-none-any.whl", hash = "sha256:3435fb4ac3835216484903a04f1551731a68533042e74b41a60cacd2cb86ae7b"},
+    {file = "code_loader_helpers-1.0.21.tar.gz", hash = "sha256:7f7d776f2e70ecbbb8774fb05a9d89135ea569481b418ce62c5d9116a9adbbe8"},
 ]
 
 [package.dependencies]
@@ -835,7 +835,7 @@ matplotlib = ">=3.3.4"
 opencv-python = ">=4.5.5,<5.0.0"
 scikit-image = ">=0.19.2,<0.20.0"
 tensorflow = {version = ">=2.0,<3.0", markers = "platform_machine == \"x86_64\""}
-tensorflow-macos = {version = ">=2.5,<3.0", markers = "platform_machine == \"arm64\""}
+tensorflow-macos = {version = ">=2.5,<2.15.1 || >2.15.1,<3.0", markers = "platform_machine == \"arm64\""}
 torch = ">=1.4.0,<=2.1.0"
 
 [[package]]
@@ -6956,4 +6956,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.11"
-content-hash = "79afc8df463e7625107efa3b423f6c13713d22d8ed618e36845e4e73b4174632"
+content-hash = "bb9577648d88709faa2cb553a496cf8cc9773f3ea9bd0a3c7c81a46515d4cabd"
