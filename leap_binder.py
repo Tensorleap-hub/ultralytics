@@ -59,13 +59,13 @@ def gt_encoder(idx: int, preprocessing: PreprocessResponse) -> Union[
     ndarray[Any, dtype[Any]], tuple[ndarray[Any, dtype[Any]], Any]]:
     _, clss, bboxes, keypoints, _ =pre_process_dataloader(preprocessing, idx,predictor)
     if clss.shape[0]==0 and  bboxes.shape[0]==0:
-        return np.full((1, 5), np.nan,dtype=np.float32)
+        return np.full((1, 56), np.nan,dtype=np.float32)
     elif clss.shape[0]==0:
-        temp_array=np.full((bboxes.shape[0], 5), np.nan,dtype=np.float32)
+        temp_array=np.full((bboxes.shape[0], 56), np.nan,dtype=np.float32)
         temp_array[:,:4]=bboxes
         return temp_array
     elif bboxes.shape[0]==0:
-        temp_array = np.full((clss.shape[0], 5), np.nan,dtype=np.float32)
+        temp_array = np.full((clss.shape[0], 56), np.nan,dtype=np.float32)
         temp_array[:, 4] = clss
         return temp_array
     keypoints = keypoints.reshape(keypoints.shape[0],-1)
@@ -114,7 +114,6 @@ def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str,
 
 @tensorleap_custom_loss("total_loss")
 def loss(pred80,pred40,pred20, keypoints_pred, gt,demo_pred):
-    gt=np.squeeze(gt,axis=0)
     d={}
     d["bboxes"] = torch.from_numpy(gt[...,:4]).squeeze(0)
     d["cls"] = torch.from_numpy(gt[...,4])
@@ -201,7 +200,6 @@ def ious(y_pred: np.ndarray,preprocess: SamplePreprocessResponse):
 
 @tensorleap_custom_metric("cost", direction=MetricDirection.Downward)
 def cost(pred80,pred40,pred20,keypoints_pred, gt):
-    gt=np.squeeze(gt,axis=0)
     d={}
     d["bboxes"] = torch.from_numpy(gt[...,:4]).squeeze(0)
     d["cls"] = torch.from_numpy(gt[...,4])

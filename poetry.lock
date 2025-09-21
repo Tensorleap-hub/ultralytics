@@ -803,17 +803,18 @@ testing = ["pytest (>=7.2.1)", "pytest-cov (>=4.0.0)", "tox (>=4.4.3)"]
 
 [[package]]
 name = "code-loader"
-version = "1.0.102.dev2"
+version = "1.0.132"
 description = ""
 optional = false
-python-versions = "<3.12,>=3.8"
+python-versions = "<3.13,>=3.8"
 files = [
-    {file = "code_loader-1.0.102.dev2-py3-none-any.whl", hash = "sha256:c7fd48875fbfe2bab4e99bb8297a3f0901e279e6b10df1397801a895cebdc3c8"},
-    {file = "code_loader-1.0.102.dev2.tar.gz", hash = "sha256:d4c2067f9b2ddc097da9b876f37bb8f18dd5af209a6f6b4861157bc5c2cab911"},
+    {file = "code_loader-1.0.132-py3-none-any.whl", hash = "sha256:9010aa450d72a15acea722846c8d2e55b5c08054fc6f1b5d11d3af44c01674fb"},
+    {file = "code_loader-1.0.132.tar.gz", hash = "sha256:91759bb4b87245602d83bf5ae2413b99a8516f86528071616730f48e300f3a22"},
 ]
 
 [package.dependencies]
-numpy = ">=1.22.3,<2.0.0"
+mixpanel = ">=4.10.0,<5.0.0"
+numpy = {version = ">=1.22.3,<2.0.0", markers = "python_version >= \"3.8\" and python_version < \"3.11\""}
 psutil = ">=5.9.5,<6.0.0"
 pyyaml = ">=6.0.2,<7.0.0"
 requests = ">=2.32.3,<3.0.0"
@@ -3032,6 +3033,24 @@ files = [
     {file = "mergedeep-1.3.4-py3-none-any.whl", hash = "sha256:70775750742b25c0d8f36c55aed03d24c3384d17c951b3175d898bd778ef0307"},
     {file = "mergedeep-1.3.4.tar.gz", hash = "sha256:0096d52e9dad9939c3d975a774666af186eda617e6ca84df4c94dec30004f2a8"},
 ]
+
+[[package]]
+name = "mixpanel"
+version = "4.11.1"
+description = "Official Mixpanel library for Python"
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "mixpanel-4.11.1-py3-none-any.whl", hash = "sha256:130633fb7d65f1fea10a9b6a6d3b8239121f2039ff2280ceb97cb9a73a711f29"},
+    {file = "mixpanel-4.11.1.tar.gz", hash = "sha256:96440d36c30ce9a845141302b6249ac1c6dccc097ce20d480100c6a1041ce78e"},
+]
+
+[package.dependencies]
+requests = ">=2.4.2,<3"
+
+[package.extras]
+dev = ["build", "ghp-import", "sphinx", "tox (>=4.28.4)", "twine"]
+test = ["pytest (>=8.4.1)", "responses (>=0.25.8)"]
 
 [[package]]
 name = "mkdocs"
@@ -6956,4 +6975,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.11"
-content-hash = "59039aa60da658935a396b3f4da6915ca4708b6e384538fc2c6a5118091cecda"
+content-hash = "026e56c63bc258519299a4506cdf260eafccb905a7b298d30732bab945432b83"

@@ -30,7 +30,7 @@ py-cpuinfo = "*"
 pandas = ">=1.1.4"
 seaborn = ">=0.11.0"
 ultralytics-thop = ">=2.0.0"
-code-loader = "1.0.102.dev2"
+code-loader = "^1.0.132"
 code-loader-helpers = "^1.0.20"
 onnx2keras = "^0.0.24"
 [tool.poetry.group.dev.dependencies]
@@ -44,8 +44,6 @@ mkdocstrings = {extras = ["python"], version = "*"}
 mkdocs-redirects = "*"
 mkdocs-ultralytics-plugin = ">=0.1.17"
 mkdocs-macros-plugin = ">=1.0.5"
-
-[tool.poetry.group.export.dependencies]
 onnx          = "^1.14.0"
 onnxruntime = ">=1.12.0,<1.17.0"
 coremltools = {version = ">=7.0", markers = "platform_system != 'Windows' and python_version <= '3.11'"}

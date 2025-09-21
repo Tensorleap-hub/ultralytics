@@ -36,3 +36,4 @@ streamlit
 hub-sdk>=0.0.12
 albumentations>=1.4.6
 pycocotools>=2.0.7
+onnxruntime >=1.12.0,<1.17.0
