@@ -113,12 +113,6 @@ def extract_mapping(m_path,mapping_version):
     mapping_folder_path =root / Path('ultralytics/tensorleap_folder/mapping')
     source_file = mapping_folder_path / f'leap_mapping_{model_type}.yaml'
 
-    if not model_type or not os.path.exists(source_file):
-        print(f"No Mapping for {m_path} was found, put your mapping in the root directory and check if it is supported.")
-    else:
-        destination_file = root/ 'leap_mapping.yaml'
-        shutil.copy(source_file, destination_file)
-        print(f"Extracting mapping for {model_type} completed")
 
 def validate_supported_models(pt_name,arch_name):
     supported_versions = [

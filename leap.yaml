@@ -3,45 +3,43 @@ projectId: 68cfd81226eef2e4623e1745
 secretId: ""
 branch: master
 entryFile: leap_custom_test.py
-include:
-    - leap_binder.py
-    - leap_custom_test.py
-    - global_params.py
-    - requirements.txt
-    - ultralytics/tensorleap_folder/utils.py
-    - ultralytics/tensorleap_folder/global_params.py
-    - tests/*.py
-    - ultralytics/*.py
-    - ultralytics/cfg/*.py
-    - ultralytics/cfg/datasets/coco.yaml
-    - ultralytics/cfg/default.yaml
-    - ultralytics/cfg/**/*.py
-    - ultralytics/cfg/**/*.yaml
-    - ultralytics/cfg/models/11/*.yaml
-    - ultralytics/data/*.py
-    - ultralytics/data/scripts/*.sh
-    - ultralytics/engine/*.py
-    - ultralytics/hub/*.py
-    - ultralytics/data/google/*.py
-    - ultralytics/models/*.py
-    - ultralytics/models/yolo/*.py
-    - ultralytics/models/yolo/**/*.py
-    - ultralytics/models/fastsam/*.py
-    - ultralytics/models/fastsam/**/*.py
-    - ultralytics/models/sam/*.py
-    - ultralytics/models/sam/**/*.py
-    - ultralytics/models/nas/*.py
-    - ultralytics/models/nas/**/*.py
-    - ultralytics/models/rtdetr/*.py
-    - ultralytics/models/rtdetr/**/*.py
-    - ultralytics/models/utils/*.py
-    - ultralytics/models/utils/**/*.py
-    - ultralytics/nn/*.py
-    - ultralytics/nn/**/*.py
-    - ultralytics/solutions/*.py
-    - ultralytics/trackers/*.py
-    - ultralytics/trackers/**/*.py
-    - ultralytics/trackers/*.md
-    - ultralytics/utils/*.py
-    - ultralytics/utils/**/*.py
+exclude:
+  - "*.h5"
+  - "**/*.h5"
+  - "*.onnx"
+  - "**/*.onnx"
+  - "*.md"
+  - "**/*.md"
+  - "*.pt"
+  - "**/*.pt"
+  - "*.ipynb"
+  - "**/*.ipynb"
+  - "*.cpp"
+  - "**/*.cpp"
+  - "docs/**"
+  - ".git/**"
+  - "**/*.png"
+  - "*.png"
+  - examples/**
+  - "*.rs"
+  - "**/*.rs"
+  - "*.xml"
+  - "**/*.xml"
+  - "*.h"
+  - "**/*.h"
+  - "*.pyc"
+  - "**/*.pyc"
+  - docker/**
+  - .github/**
+  - tests/**
+  - dvclive/**
+  - runs/**
+  - .idea/**
+  - "*.jpg"
+  - "**/*.jpg"
+  - "*.lock"
+  - "**/*.lock"
+  - "*.toml"
+  - "**/*.toml"
+
 pythonVersion: py39

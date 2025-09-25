@@ -3,21 +3,26 @@ from code_loader.contract.datasetclasses import SamplePreprocessResponse, Predic
 from code_loader.contract.enums import DataStateType
 from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
                          leap_binder, loss, gt_bb_decoder, image_visualizer, bb_decoder,
-                         cost, metadata_per_img, ious, confusion_matrix_metric)
-import tensorflow as tf
-import numpy as np
-import sklearn as sk
+                         cost, metadata_per_img, ious, confusion_matrix_metric, draw_skeleton)
+
 import onnxruntime as ort
-import numpy as np
-from code_loader.plot_functions.visualize import visualize
-from ultralytics.tensorleap_folder.utils import extract_mapping, validate_supported_models
-from ultralytics.tensorleap_folder.global_params import cfg
+from ultralytics.tensorleap_folder.utils import extract_mapping
 
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_load_model, integration_test
+labels = []
+for k in range(17):
+    labels.append(f"x_{k}")
+    labels.append(f"y_{k}")
+    labels.append(f"v_{k}")
 
-prediction_type1 = PredictionTypeHandler('key-points', labels=["x", "y", "v"] + [str(i) for i in range(17)])
+prediction_type1 = PredictionTypeHandler('output', labels = ["x", "y", "w", "h", "0"] + labels, channel_dim=1)
+prediction_type2 = PredictionTypeHandler('feat_a', labels=[str(i) for i in range(65)], channel_dim=1)
+prediction_type3 = PredictionTypeHandler('feat_b', labels=[str(i) for i in range(65)], channel_dim=1)
+prediction_type4 = PredictionTypeHandler('feat_c', labels=[str(i) for i in range(65)], channel_dim=1)
+prediction_type5 = PredictionTypeHandler(name="key_points", labels=labels, channel_dim=1)
 
-@tensorleap_load_model([prediction_type1])
+
+@tensorleap_load_model([prediction_type1, prediction_type2, prediction_type3, prediction_type4, prediction_type5])
 def load_model():
     m_path= model_path if model_path!=None else 'None_path'
     # validate_supported_models(os.path.basename(cfg.model),m_path)
@@ -50,12 +55,13 @@ def check_custom_integration(idx, subset):
     cost_dic=cost(y_pred[1],y_pred[2],y_pred[3],y_pred[4], gt)
     # iou=ious(y_pred[0].numpy(), s_prepro)
     # conf_mat = confusion_matrix_metric(y_pred[0].numpy(), s_prepro)
+    # annotated_bgr = draw_skeleton(image,[y_pred[1],y_pred[2],y_pred[3]], y_pred[4])  # BGR ndarray
 
     # metadata
-    meta_data=metadata_per_img(idx, subset)
+    # meta_data=metadata_per_img(idx, subset)
 
     # vis
-    img_vis=image_visualizer(image)
+    # img_vis=image_visualizer(image)
     # FixMe: MAke visualization!
     # pred_img=bb_decoder(image,y_pred[0].numpy())
     # if plot_vis:

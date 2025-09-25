@@ -3,6 +3,7 @@ from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custo
 from numpy import ndarray, dtype, floating
 from numpy._typing import _32Bit
 
+from ultralytics.tensorleap_folder import keypoints_vis
 from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss,possible_float_like_nan_types,wanted_cls_dic, predictor
 from ultralytics.tensorleap_folder.utils import create_data_with_ult, pre_process_dataloader, \
     update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs
@@ -69,7 +70,8 @@ def gt_encoder(idx: int, preprocessing: PreprocessResponse) -> Union[
         temp_array[:, 4] = clss
         return temp_array
     keypoints = keypoints.reshape(keypoints.shape[0],-1)
-    return np.concatenate([bboxes,clss, keypoints],axis=1)
+    concatenated = np.concatenate([bboxes,clss, keypoints],axis=1)
+    return concatenated
 
 # ----------------------------------------------------------metadata----------------------------------------------------
 
@@ -113,14 +115,15 @@ def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str,
 # ----------------------------------------------------------loss--------------------------------------------------------
 
 @tensorleap_custom_loss("total_loss")
-def loss(pred80,pred40,pred20, keypoints_pred, gt,demo_pred):
+def loss(pred8_0,pred40,pred20, keypoints_pred, gt,demo_pred):
+    # return np.zeros(1)
     d={}
     d["bboxes"] = torch.from_numpy(gt[...,:4]).squeeze(0)
     d["cls"] = torch.from_numpy(gt[...,4])
     keypoints = torch.from_numpy(gt[...,5:]).reshape(gt[...,5].shape[0], 17, 3)
     d['keypoints'] = keypoints
     d["batch_idx"] = torch.zeros_like(d['cls'])
-    y_pred_torch = [torch.from_numpy(s) for s in [pred80,pred40,pred20]]
+    y_pred_torch = [torch.from_numpy(s) for s in [pred8_0,pred40,pred20]]
     y_pred_torch = [y_pred_torch, torch.from_numpy(keypoints_pred)]
     all_loss,_= criterion(y_pred_torch, d)
     return all_loss.unsqueeze(0).numpy()
@@ -153,6 +156,14 @@ def bb_decoder(image: np.ndarray, predictions: np.ndarray) -> LeapImageWithBBox:
     image = rescale_min_max(image)
     return LeapImageWithBBox(data=(image.transpose(1,2,0)), bounding_boxes=bbox)
 
+def draw_skeleton(image: np.ndarray, feats, kpts: np.ndarray) -> LeapImage:
+    from ultralytics.utils.tal import make_anchors
+    image = np.transpose(image.squeeze(0), [1, 2, 0])
+    feats = [torch.from_numpy(feat) for feat in feats]
+    anchor_points, stride_tensor = make_anchors(feats, criterion.stride, 0.5)
+    keypoints = criterion.kpts_decode(anchor_points, torch.from_numpy(kpts).view(1, -1, *criterion.kpt_shape))
+    image_wt_pred = keypoints_vis.draw_ultralytics_keypoints(image, keypoints)
+    return LeapImage(image_wt_pred, compress=False)
 
 #Greedy one2one iou
 @tensorleap_custom_metric("ious", direction=MetricDirection.Upward)
@@ -200,6 +211,7 @@ def ious(y_pred: np.ndarray,preprocess: SamplePreprocessResponse):
 
 @tensorleap_custom_metric("cost", direction=MetricDirection.Downward)
 def cost(pred80,pred40,pred20,keypoints_pred, gt):
+    # return np.zeros(1)
     d={}
     d["bboxes"] = torch.from_numpy(gt[...,:4]).squeeze(0)
     d["cls"] = torch.from_numpy(gt[...,4])
@@ -277,10 +289,10 @@ def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResp
 
 
 
-leap_binder.add_prediction(name='object detection', labels=["x", "y", "w", "h"] + [cl for cl in all_clss.values()], channel_dim=1)
-leap_binder.add_prediction(name='concatenate_20', labels=[str(i) for i in range(20)], channel_dim=-1)
-leap_binder.add_prediction(name='concatenate_40', labels=[str(i) for i in range(40)], channel_dim=-1)
-leap_binder.add_prediction(name='concatenate_80', labels=[str(i) for i in range(80)], channel_dim=-1)
+# leap_binder.add_prediction(name='object detection', labels=["x", "y", "w", "h"] + [cl for cl in all_clss.values()], channel_dim=1)
+# leap_binder.add_prediction(name='concatenate_20', labels=[str(i) for i in range(20)], channel_dim=-1)
+# leap_binder.add_prediction(name='concatenate_40', labels=[str(i) for i in range(40)], channel_dim=-1)
+# leap_binder.add_prediction(name='concatenate_80', labels=[str(i) for i in range(80)], channel_dim=-1)
 
 # if __name__ == '__main__':
     # leap_binder.check()
