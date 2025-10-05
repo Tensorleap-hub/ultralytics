@@ -75,7 +75,7 @@ def draw_ultralytics_keypoints(
     else:
         kpts = np.asarray(kpts)
     if kpts.shape[0] != 17 or kpts.shape[1] not in (2, 3):
-        raise ValueError("kpts must be shape [17,2] or [17,3].")
+        raise ValueError(f"kpts must be shape [17,2] or [17,3]. got {kpts.shape}")
 
     has_conf = (kpts.shape[1] == 3)
 

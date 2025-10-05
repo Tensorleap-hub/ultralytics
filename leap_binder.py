@@ -1,12 +1,16 @@
+import copy
+
 import torch
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric
 from numpy import ndarray, dtype, floating
 from numpy._typing import _32Bit
 
+from ultralytics.engine.results import Boxes
 from ultralytics.tensorleap_folder import keypoints_vis
-from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss,possible_float_like_nan_types,wanted_cls_dic, predictor
+from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss, \
+    possible_float_like_nan_types, wanted_cls_dic, predictor, ob_yolo_data, ob_cfg
 from ultralytics.tensorleap_folder.utils import create_data_with_ult, pre_process_dataloader, \
-    update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs
+    update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, pre_process_ob_dataloader
 from typing import List, Dict, Union, Any
 import numpy as np
 from code_loader import leap_binder
@@ -20,14 +24,18 @@ from code_loader.inner_leap_binder.leapbinder_decorators import (tensorleap_prep
 from code_loader.contract.responsedataclasses import BoundingBox
 from code_loader.contract.visualizer_classes import LeapImageWithBBox
 from code_loader.utils import rescale_min_max
-from ultralytics.utils.plotting import output_to_target #doable
+
+from ultralytics.utils import ops
+from ultralytics.utils.plotting import output_to_target, Annotator  # doable
 from ultralytics.utils.metrics import box_iou #doable
+from ultralytics.utils.tal import make_anchors
 
 
 # ----------------------------------------------------data processing---------------------------------------------------
 
 @tensorleap_preprocess()
 def preprocess_func_leap() -> List[PreprocessResponse]:
+
     dataset_types = [DataStateType.training, DataStateType.validation]
     phases = ['train', 'val']
     responses = []
@@ -39,9 +47,10 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
         dataset_types.append(DataStateType.unlabeled)
     for phase, dataset_type in zip(phases, dataset_types):
         data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase)
+        ob_data_loader, ob_n_samples = create_data_with_ult(ob_cfg, ob_yolo_data, phase=phase)
         responses.append(
             PreprocessResponse(sample_ids=list(range(n_samples)),
-                               data={'dataloader':data_loader},
+                               data={'dataloader':data_loader, "ob_dataloader": ob_data_loader},
                                sample_id_type=int,
                                state=dataset_type))
     return responses
@@ -51,14 +60,14 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
 
 @tensorleap_input_encoder('image',channel_dim=1)
 def input_encoder(idx: int, preprocess: PreprocessResponse) -> np.ndarray:
-    imgs, _, _,_, _=pre_process_dataloader(preprocess, idx, predictor)
+    imgs, _, _,_, _, orig_shape =pre_process_dataloader(preprocess, idx, predictor)
     return imgs.astype('float32')
 
 
 @tensorleap_gt_encoder('classes')
 def gt_encoder(idx: int, preprocessing: PreprocessResponse) -> Union[
     ndarray[Any, dtype[Any]], tuple[ndarray[Any, dtype[Any]], Any]]:
-    _, clss, bboxes, keypoints, _ =pre_process_dataloader(preprocessing, idx,predictor)
+    _, clss, bboxes, keypoints, _, _ = pre_process_dataloader(preprocessing, idx,predictor)
     if clss.shape[0]==0 and  bboxes.shape[0]==0:
         return np.full((1, 56), np.nan,dtype=np.float32)
     elif clss.shape[0]==0:
@@ -73,6 +82,20 @@ def gt_encoder(idx: int, preprocessing: PreprocessResponse) -> Union[
     concatenated = np.concatenate([bboxes,clss, keypoints],axis=1)
     return concatenated
 
+# @tensorleap_gt_encoder('classes')
+def ob_gt_encoder(idx: int, preprocessing: PreprocessResponse) -> np.ndarray:
+    _, clss, bboxes, _, _ =pre_process_ob_dataloader(preprocessing, idx,predictor)
+    if clss.shape[0]==0 and  bboxes.shape[0]==0:
+        return np.full((1, 5), np.nan,dtype=np.float32)
+    elif clss.shape[0]==0:
+        temp_array=np.full((bboxes.shape[0], 5), np.nan,dtype=np.float32)
+        temp_array[:,:4]=bboxes
+        return temp_array
+    elif bboxes.shape[0]==0:
+        temp_array = np.full((clss.shape[0], 5), np.nan,dtype=np.float32)
+        temp_array[:, 4] = clss
+        return temp_array
+    return np.concatenate([bboxes,clss],axis=1)
 # ----------------------------------------------------------metadata----------------------------------------------------
 
 @tensorleap_metadata('metadata_sample_index')
@@ -83,10 +106,14 @@ def metadata_sample_index(idx: int, preprocess: PreprocessResponse) -> int:
 @tensorleap_metadata("image info a", metadata_type = possible_float_like_nan_types)
 def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str, int, float]]:
     nan_default_value = None
+    _, _, _, _, _, orig_shape = pre_process_dataloader(data, idx, predictor)
     gt_data = gt_encoder(idx, data)
+    ob_gt_data = ob_gt_encoder(idx, data)
     cls_gt = np.expand_dims(gt_data[:, 4], axis=1)
+    ob_cls_gt = np.expand_dims(ob_gt_data[:, 4], axis=1)
     bbox_gt = gt_data[:, :4]
-    clss_info = np.unique(cls_gt, return_counts=True)
+    clss_info = np.unique(ob_cls_gt, return_counts=True)
+    num_preds = len(cls_gt) or nan_default_value
     count_dict = update_dict_count_cls(all_clss, clss_info,nan_default_value)
     areas, aspect_ratios = bbox_area_and_aspect_ratio(bbox_gt, data.data['dataloader'][idx]['resized_shape'])
     occlusion_matrix, areas_in_pixels, union_in_pixels = calculate_iou_all_pairs(bbox_gt, data.data['dataloader'][idx][
@@ -95,8 +122,9 @@ def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str,
     d = {
         "image path": data.data['dataloader'].im_files[idx],
         "idx": idx,
-        "# unique classes": len(clss_info[0]) if no_nans_values else nan_default_value,
-        "# of objects": int(clss_info[1].sum()) if no_nans_values else nan_default_value,
+        "# unique classes - ob": len(clss_info[0]) if no_nans_values else nan_default_value,
+        "# of objects - ob": int(clss_info[1].sum()) if no_nans_values else nan_default_value,
+        '# of pose predictions': int(num_preds),
         "mean bbox area": float(areas.mean()) if no_nans_values else nan_default_value,
         "var bbox area": float(areas.var()) if no_nans_values else nan_default_value,
         "median bbox area": float(np.median(areas)) if no_nans_values else nan_default_value,
@@ -106,26 +134,44 @@ def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str,
             occlusion_matrix.sum() / areas_in_pixels.sum()) if no_nans_values else nan_default_value,
         "max bbox overlap": float(
             (occlusion_matrix.sum(axis=1) / areas_in_pixels).max()) if no_nans_values else nan_default_value,
+        "orig_H": orig_shape[0],
+        "orig_W": orig_shape[1],
     }
     d.update(**count_dict)
     return d
 
 
+def preprocess_batch(batch):
+    batch = predictor.preprocess(batch)
+    if not isinstance(batch['ori_shape'], list):
+        batch['ori_shape'] = [batch['ori_shape']]
+    if not isinstance(batch['ratio_pad'], list):
+        batch['ratio_pad'] = [batch['ratio_pad']]
+    batch['img'] = batch["img"].unsqueeze(0)
+    return batch
 
+def postprocess(pred: np.ndarray,
+                                feat80: np.ndarray, feat40: np.ndarray, feat20: np.ndarray,
+                                kpts: np.ndarray):
+    all_feats = [pred, feat80, feat40, feat20, kpts]
+    y = [torch.from_numpy(copy.deepcopy(t)) for t in all_feats]
+    y = [y[0], ([y[1:4]], y[4])]
+    preds = predictor.postprocess(y)
+    return preds
 # ----------------------------------------------------------loss--------------------------------------------------------
 
-@tensorleap_custom_loss("total_loss")
-def loss(pred8_0,pred40,pred20, keypoints_pred, gt,demo_pred):
+@tensorleap_custom_loss(name="fantastic_loss")
+def loss(pred8_0,pred40,pred20, keypoints_pred, gt, exm_pred):
     # return np.zeros(1)
     d={}
     d["bboxes"] = torch.from_numpy(gt[...,:4]).squeeze(0)
     d["cls"] = torch.from_numpy(gt[...,4])
-    keypoints = torch.from_numpy(gt[...,5:]).reshape(gt[...,5].shape[0], 17, 3)
+    keypoints = torch.from_numpy(gt.squeeze(0)[...,5:]).reshape(gt[...,5].shape[1], 17, 3)
     d['keypoints'] = keypoints
     d["batch_idx"] = torch.zeros_like(d['cls'])
     y_pred_torch = [torch.from_numpy(s) for s in [pred8_0,pred40,pred20]]
     y_pred_torch = [y_pred_torch, torch.from_numpy(keypoints_pred)]
-    all_loss,_= criterion(y_pred_torch, d)
+    all_loss,parts= criterion(y_pred_torch, d) # box, cls, dfl, kpt_location, kpt_visibility
     return all_loss.unsqueeze(0).numpy()
 
 
@@ -156,14 +202,158 @@ def bb_decoder(image: np.ndarray, predictions: np.ndarray) -> LeapImageWithBBox:
     image = rescale_min_max(image)
     return LeapImageWithBBox(data=(image.transpose(1,2,0)), bounding_boxes=bbox)
 
-def draw_skeleton(image: np.ndarray, feats, kpts: np.ndarray) -> LeapImage:
-    from ultralytics.utils.tal import make_anchors
+def ensure_size(img_bgr, expected_w: int, expected_h: int):
+    """
+    Return image resized to (expected_w, expected_h) if needed.
+    img_bgr: numpy array (H,W,3) in BGR
+    expected_w/expected_h: original image size used for labels/preds
+    """
+    if img_bgr is None:
+        return img_bgr
+    h, w = img_bgr.shape[:2]
+    if (w, h) != (expected_w, expected_h):
+        # Resize to original pixel size so overlays/coords stay correct
+        import cv2
+        img_bgr = cv2.resize(img_bgr, (expected_w, expected_h), interpolation=cv2.INTER_LINEAR)
+    return img_bgr
+
+@tensorleap_custom_visualizer('gt_keypoints_2', LeapDataType.Image)
+def draw_gt_on_image(image: np.ndarray, gt, data: SamplePreprocessResponse):
+    """
+    image_path: str
+    gt_bboxes:  list of [x1,y1,x2,y2] in pixels
+    gt_keypoints: list of 17x3 arrays per person -> [[x,y,v], ...] with v∈{0,1,2}
+    out_path: str
+    """
+    meta_data = metadata_per_img(int(data.sample_ids), data.preprocess_response)
+    image = rescale_min_max(image)
     image = np.transpose(image.squeeze(0), [1, 2, 0])
-    feats = [torch.from_numpy(feat) for feat in feats]
-    anchor_points, stride_tensor = make_anchors(feats, criterion.stride, 0.5)
-    keypoints = criterion.kpts_decode(anchor_points, torch.from_numpy(kpts).view(1, -1, *criterion.kpt_shape))
-    image_wt_pred = keypoints_vis.draw_ultralytics_keypoints(image, keypoints)
-    return LeapImage(image_wt_pred, compress=False)
+    # image = ensure_size(image, meta_data['orig_W'], meta_data['orig_H'])
+    gt_bboxes = gt[...,:5][0,::]
+    gt_keypoints = gt[...,5:][0,::]
+    gt_keypoints = gt_keypoints.reshape(gt_keypoints.shape[0], 17, 3)
+    h, w = image.shape[:2]
+    ann = Annotator(np.ascontiguousarray(image), line_width=2)
+
+    for bbox, kpts in zip(gt_bboxes, gt_keypoints):
+        # 1) draw bbox
+        ann.box_label(bbox, label="GT", color=(0, 200, 0))
+
+        # 2) draw 17 keypoints + skeleton:
+        #    convert (x,y,v) -> (x,y,conf) where conf=1 if v>0 else 0
+        kpts_xyc = []
+        for (x, y, v) in kpts:
+            conf = 1.0 if v > 0 else 0.0
+            kpts_xyc.append([x, y, conf])
+
+        # Annotator.kpts expects a torch.Tensor of shape [17,3]
+        kpts_tensor = torch.tensor(kpts_xyc, dtype=torch.float32)
+
+        # Draw dots + skeleton lines (COCO skeleton is built-in)
+        ann.kpts(kpts_tensor, shape=(meta_data['orig_W'], meta_data['orig_H']), kpt_line=True)
+    im = ann.result()
+    return LeapImage(im, compress=False)
+
+
+
+@tensorleap_custom_visualizer('gt_keypoints', LeapDataType.Image)
+def draw_gt_skeleton(image: np.ndarray,
+                  gt: np.ndarray,
+                  data : SamplePreprocessResponse) -> LeapImage:
+    meta_data = metadata_per_img(int(data.sample_ids), data.preprocess_response)
+    image = rescale_min_max(image)
+    image = np.transpose(image.squeeze(0), [1, 2, 0])
+    keypoints = gt[...,5:][0,::]
+    # turn gt coordinates to image coordinates
+    bboxes = gt[...,:5][0,::]
+    imgsz = image.shape[:2]
+    bboxes = ops.xywh2xyxy(bboxes[::,:4]) * np.array(imgsz)[[1, 0, 1, 0]]   # target boxes
+    pred_kpts = torch.from_numpy(keypoints.reshape(len(keypoints), 17, 3)) \
+        if len(keypoints[0,::]) else keypoints
+    h, w = imgsz
+    pred_kpts[..., 0] *= w
+    pred_kpts[..., 1] *= h
+    if not np.isfinite(gt).any():
+        return LeapImage(image)
+    annotator = Annotator(
+        np.ascontiguousarray(image),  # Classify tasks default to pil=True
+        example={0:'person'},
+    )
+    annotator.lw = 1
+    # Plot Pose results
+    if pred_kpts is not None:
+        for i, k in enumerate(reversed(pred_kpts)):
+            annotator.kpts(
+                k,
+                (meta_data['orig_W'], meta_data['orig_H']),
+                radius=5,
+                kpt_line=True,
+                kpt_color=None,
+            )
+    bboxes = np.insert(bboxes, 4, 1, axis=1) # add conf
+    bboxes = np.insert(bboxes, 5, 0, axis=1)  # add conf
+    pred_boxes = Boxes(bboxes, (meta_data['orig_W'], meta_data['orig_H']))
+    names = {0: 'person'}
+    is_obb = False
+    conf = True
+    for i, d in enumerate(reversed(pred_boxes)):
+        c, conf, id = int(d.cls), float(d.conf) if conf else None, None if d.id is None else int(d.id.item())
+        name = ("" if id is None else f"id:{id} ") + names[c]
+        label = 'person'
+        box = d.xyxyxyxy.reshape(-1, 4, 2).squeeze() if is_obb else d.xyxy.squeeze()
+        annotator.box_label(
+            box,
+            label,
+            None,
+            rotated=is_obb,
+        )
+    im = annotator.result()
+    return LeapImage(im, compress=False)
+
+
+@tensorleap_custom_visualizer('keypoints_visualizer', LeapDataType.Image)
+def draw_skeleton(image: np.ndarray,
+                  pred: np.ndarray, feat80: np.ndarray, feat40: np.ndarray, feat20: np.ndarray, kpts: np.ndarray,
+                  data : SamplePreprocessResponse) -> LeapImage:
+    meta_data = metadata_per_img(int(data.sample_ids), data.preprocess_response)
+    image = rescale_min_max(image)
+    image = np.transpose(image.squeeze(0), [1, 2, 0])
+    y_pred = postprocess(pred, feat80, feat40, feat20, kpts)
+    y_pred = y_pred[0]
+    pred_kpts = y_pred[:,6:].view(len(y_pred), 17, 3) if len(y_pred) else y_pred
+    annotator = Annotator(
+        np.ascontiguousarray(image),  # Classify tasks default to pil=True
+        example={0:'person'},
+    )
+    annotator.lw = 1
+    # Plot Pose results
+    if pred_kpts is not None:
+        for i, k in enumerate(reversed(pred_kpts)):
+            annotator.kpts(
+                k,
+                (meta_data['orig_W'], meta_data['orig_H']),
+                radius=5,
+                kpt_line=True,
+                kpt_color=None,
+            )
+
+    pred_boxes = Boxes(y_pred[:,:6], (meta_data['orig_W'], meta_data['orig_H']))
+    names = {0: 'person'}
+    is_obb = False
+    conf = True
+    for i, d in enumerate(reversed(pred_boxes)):
+        c, conf, id = int(d.cls), float(d.conf) if conf else None, None if d.id is None else int(d.id.item())
+        name = ("" if id is None else f"id:{id} ") + names[c]
+        label = 'person'
+        box = d.xyxyxyxy.reshape(-1, 4, 2).squeeze() if is_obb else d.xyxy.squeeze()
+        annotator.box_label(
+            box,
+            label,
+            None,
+            rotated=is_obb,
+        )
+    im = annotator.result()
+    return LeapImage(im, compress=False)
 
 #Greedy one2one iou
 @tensorleap_custom_metric("ious", direction=MetricDirection.Upward)
@@ -215,7 +405,7 @@ def cost(pred80,pred40,pred20,keypoints_pred, gt):
     d={}
     d["bboxes"] = torch.from_numpy(gt[...,:4]).squeeze(0)
     d["cls"] = torch.from_numpy(gt[...,4])
-    keypoints = torch.from_numpy(gt[...,5:]).reshape(gt[...,5].shape[0], 17, 3)
+    keypoints = torch.from_numpy(gt.squeeze(0)[...,5:]).reshape(gt[...,5].shape[1], 17, 3)
     d['keypoints'] = keypoints
     d["batch_idx"] = torch.zeros_like(d['cls'])
     y_pred_torch = [torch.from_numpy(s) for s in [pred80,pred40,pred20]]
@@ -225,6 +415,27 @@ def cost(pred80,pred40,pred20,keypoints_pred, gt):
             "kobj": loss_parts[2].unsqueeze(0).numpy(), "cls":loss_parts[3].unsqueeze(0).numpy(),
             "dfl":loss_parts[4].unsqueeze(0).numpy()}
 
+
+
+@tensorleap_custom_metric('Matrices', direction={'precision(B)': MetricDirection.Upward, 'recall(B)': MetricDirection.Upward, 'mAP50(B)': MetricDirection.Upward,
+             'mAP50-95(B)': MetricDirection.Upward, 'precision(P)': MetricDirection.Upward, 'recall(P)': MetricDirection.Upward,
+             'mAP50(P)': MetricDirection.Upward, 'mAP50-95(P)': MetricDirection.Upward, 'fitness': MetricDirection.Upward })
+def get_matrices(pred: np.ndarray, feat80: np.ndarray, feat40: np.ndarray, feat20: np.ndarray, kpts: np.ndarray,
+                 preprocess : SamplePreprocessResponse):
+    default_value = np.ones(1) * np.nan
+    batch = preprocess.preprocess_response.data['dataloader'][int(preprocess.sample_ids)]
+    batch = preprocess_batch(batch)
+    preds = postprocess(pred, feat80, feat40, feat20, kpts)
+    stats = {'precision(B)': default_value, 'recall(B)': default_value, 'mAP50(B)': default_value,
+             'mAP50-95(B)': default_value, 'precision(P)': default_value, 'recall(P)': default_value,
+             'mAP50(P)': default_value, 'mAP50-95(P)': default_value, 'fitness': default_value}
+
+    if all(len(preds[i]) == 0 for i in range(len(preds))):
+        return stats
+    predictor.update_metrics(preds, batch)
+    stats = predictor.get_stats()
+    stats = {key.split('/')[-1]: np.array([float(value)]) for key, value in stats.items()}
+    return stats
 
 @tensorleap_custom_metric('Confusion Matrix')
 def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):

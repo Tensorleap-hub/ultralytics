@@ -6,12 +6,14 @@ from pathlib import Path
 import numpy as np
 import torch
 from code_loader.contract.datasetclasses import PreprocessResponse
-from ultralytics.data import  build_yolo_dataset#problemtic
+from ultralytics.tensorleap_folder.dataset import build_yolo_dataset
+# from ultralytics.data import  build_yolo_dataset#problemtic
 from ultralytics.utils.plotting import output_to_target #doable
 
 
 def create_data_with_ult(cfg,yolo_data, phase='val'):
     n_samples = len(os.listdir(yolo_data[phase]))
+    n_samples = 100
     dataset = build_yolo_dataset(cfg, yolo_data[phase],n_samples , yolo_data, mode='val', stride=32)
     return dataset, n_samples
 
@@ -19,7 +21,13 @@ def pre_process_dataloader(preprocessresponse:PreprocessResponse, idx, predictor
     batch= preprocessresponse.data['dataloader'][idx]
     batch = predictor.preprocess(batch)
     imgs, clss, bboxes, keypoints, batch_idxs, ori_shape, resized_shape,ratio_pad = batch['img'], batch['cls'], batch['bboxes'], batch['keypoints'], batch['batch_idx'],batch['ori_shape'],batch['resized_shape'],batch['ratio_pad']
-    return imgs.numpy(), clss.numpy(), bboxes.numpy(), keypoints.numpy(), batch_idxs.numpy()
+    return imgs.numpy(), clss.numpy(), bboxes.numpy(), keypoints.numpy(), batch_idxs.numpy(), ori_shape
+
+
+def pre_process_ob_dataloader(preprocessresponse:PreprocessResponse, idx, predictor):
+    batch= preprocessresponse.data['ob_dataloader'][idx]
+    imgs, clss, bboxes, batch_idxs, ori_shape, resized_shape,ratio_pad = batch['img'], batch['cls'], batch['bboxes'], batch['batch_idx'],batch['ori_shape'],batch['resized_shape'],batch['ratio_pad']
+    return imgs.numpy(), clss.numpy(), bboxes.numpy(), batch_idxs.numpy(), ori_shape
 
 
 def pred_post_process(y_pred, predictor, image, cfg):

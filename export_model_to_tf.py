@@ -24,7 +24,7 @@ def dict_to_namespace(d):
 
 def export_to_onnx(cfg):
     model = YOLO(cfg.model if hasattr(cfg, "model") else "yolo11s.pt")
-    model.export(format="onnx", nms=False, export_train_head=True)
+    model.export(format="onnx", nms=False, export_train_head=True, dynamic=True)
 
 def onnx_exporter(h5=False):
     file_path = 'ultralytics/cfg/default.yaml'

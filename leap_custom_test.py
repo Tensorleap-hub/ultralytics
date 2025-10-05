@@ -1,9 +1,16 @@
 import os
+
+import numpy as np
+import torch
 from code_loader.contract.datasetclasses import SamplePreprocessResponse, PredictionTypeHandler
 from code_loader.contract.enums import DataStateType
+from code_loader.utils import rescale_min_max
+from code_loader.plot_functions.visualize import visualize
+
 from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
                          leap_binder, loss, gt_bb_decoder, image_visualizer, bb_decoder,
-                         cost, metadata_per_img, ious, confusion_matrix_metric, draw_skeleton)
+                         cost, metadata_per_img, ious, confusion_matrix_metric, draw_skeleton, get_matrices,
+                         draw_gt_skeleton, draw_gt_on_image)
 
 import onnxruntime as ort
 from ultralytics.tensorleap_folder.utils import extract_mapping
@@ -41,7 +48,6 @@ def check_custom_integration(idx, subset):
     model = load_model()
     # get input images
     image = input_encoder(idx, subset)
-
     # predict
     y_pred = model.run(None, {'images': image})
 
@@ -50,25 +56,24 @@ def check_custom_integration(idx, subset):
     # gt_img = gt_bb_decoder(np.expand_dims(image, axis=0), np.expand_dims(gt, axis=0))
 
     # custom metrics
-    total_loss=loss(y_pred[1],y_pred[2],y_pred[3], y_pred[4],
+    total_loss_0=loss(y_pred[1],y_pred[2],y_pred[3], y_pred[4],
                     gt, y_pred[0])
-    cost_dic=cost(y_pred[1],y_pred[2],y_pred[3],y_pred[4], gt)
-    # iou=ious(y_pred[0].numpy(), s_prepro)
-    # conf_mat = confusion_matrix_metric(y_pred[0].numpy(), s_prepro)
-    # annotated_bgr = draw_skeleton(image,[y_pred[1],y_pred[2],y_pred[3]], y_pred[4])  # BGR ndarray
-
-    # metadata
-    # meta_data=metadata_per_img(idx, subset)
+    s_prepro = SamplePreprocessResponse(idx, subset)
 
     # vis
-    # img_vis=image_visualizer(image)
-    # FixMe: MAke visualization!
-    # pred_img=bb_decoder(image,y_pred[0].numpy())
-    # if plot_vis:
-    #     visualize(img_vis)
-    #     visualize(pred_img)
-    #     if subset.state != DataStateType.unlabeled:
-    #         visualize(gt_img)
+    annotated_bgr = draw_skeleton(image,y_pred[0], y_pred[1], y_pred[2], y_pred[3], y_pred[4], data=s_prepro)  # BGR ndarray
+    # gt_bgr = draw_gt_on_image(image, gt, data=s_prepro)
+    gt_bgr = draw_gt_skeleton(image, gt, data=s_prepro)
+    img_vis = image_visualizer(image)
+
+    visualize(annotated_bgr)
+    visualize(gt_bgr)
+    visualize(img_vis)
+
+    # matrices
+    mats = get_matrices(y_pred[0], y_pred[1], y_pred[2], y_pred[3], y_pred[4], preprocess=s_prepro)
+    cost_dic = cost(y_pred[1], y_pred[2], y_pred[3], y_pred[4], gt)
+
 
 
 if __name__ == '__main__':
@@ -76,4 +81,4 @@ if __name__ == '__main__':
     plot_vis= False
     model_path = '/Users/orram/Tensorleap/ultralytics/yolo11s-pose.onnx'  # Choose None if only pt version available else, use your h5/onnx model's path.
     mapping_version = None # Set as  None if the model's name is supported by ultralytics. Else, set to the base yolo architecture name (e.x if your trained model has the same architecture as yolov11s set mapping_version=yolov11s ) .
-    check_custom_integration(0, preprocess_func_leap()[0])
+    check_custom_integration(43, preprocess_func_leap()[0])

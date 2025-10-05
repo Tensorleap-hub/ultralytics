@@ -1,9 +1,13 @@
+import copy
 from pathlib import Path
 import os
 import numpy as np
 import yaml
 from types import SimpleNamespace
 from code_loader.contract.enums import DatasetMetadataType
+
+from ultralytics import YOLO
+from ultralytics.models.yolo.pose import PosePredictor, PoseValidator
 from ultralytics.utils import callbacks as callbacks_ult
 from ultralytics.models.yolo.detect import DetectionValidator #problematic
 from ultralytics.utils import yaml_load
@@ -47,9 +51,12 @@ def get_dataset_yaml(cfg):
 
 def get_predictor_obj(cfg,yolo_data):
     callbacks = callbacks_ult.get_default_callbacks()
-    predictor = DetectionValidator(args=cfg, _callbacks=callbacks)
+    predictor = PoseValidator(args=cfg, _callbacks=callbacks)
+    # predictor.nc = 1
     predictor.data = yolo_data
     predictor.end2end = False
+    model = YOLO(cfg.model if hasattr(cfg, "model") else "yolo11s.pt")
+    predictor.init_metrics(model)
     return predictor
 
 def get_wanted_cls(cls_mapping,cfg):
@@ -79,6 +86,11 @@ def set_cfg_dict():
 cfg = set_cfg_dict()
 yolo_data=get_yolo_data(cfg) #doable
 dataset_yaml=get_dataset_yaml(cfg)#doable
+ob_cfg = copy.deepcopy(cfg)
+ob_cfg.data = 'coco.yaml'
+ob_cfg.task = 'detect'
+ob_data_yaml=get_dataset_yaml(ob_cfg)
+ob_yolo_data=get_yolo_data(ob_cfg)
 criterion=get_criterion(Path(cfg.model),cfg)#problemtic
 all_clss=dataset_yaml["names"]
 cls_mapping = {v: k for k, v in all_clss.items()}
