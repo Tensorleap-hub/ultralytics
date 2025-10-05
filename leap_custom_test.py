@@ -4,7 +4,7 @@ from code_loader.contract.enums import DataStateType
 
 from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
                          loss, gt_bb_decoder, image_visualizer, bb_decoder,
-                         cost, metadata_per_img, ious, confusion_matrix_metric)
+                         cost, metadata_per_img, ious, confusion_matrix_metric, preprocess_unlabeled_func_leap)
 import tensorflow as tf
 import onnxruntime as ort
 import numpy as np
@@ -40,9 +40,8 @@ def check_custom_test_mapping(idx, subset):
     image = input_encoder(idx, subset)
     model = load_model()
     y_pred = model([image]) if keras_model  else model.run(None, {'images': image})
-    #TODO- problems with infrence on unlabeled data, this line is mandatory and it fails the mappings
     #if subset.state != DataStateType.unlabeled: we can solve this by setting the inputs of integration_test_function(None, None) to training mode during the mapping mode.
-# get gt
+# get gt #TODO- need to make sure that this is not needed and that if no lables it will not crash
     gt = gt_encoder(idx, subset)
     gt_img = gt_bb_decoder(image, gt)
 # custom metrics
@@ -57,11 +56,12 @@ def check_custom_test_mapping(idx, subset):
     pred_img=bb_decoder(image,y_pred[0])
     visualize(img_vis)
     visualize(pred_img)
-    # if subset.state != DataStateType.unlabeled:
+    # if subset.state != DataStateType.unlabeled: #TODO- need to make sure that this is not needed and that if no lables it will not crash
     visualize(gt_img)
 
 
 
 if __name__ == '__main__':
     # keras_model, m_path = load_and_download_model()
-    check_custom_test_mapping(0, preprocess_func_leap()[0])
+    check_custom_test_mapping(0, preprocess_unlabeled_func_leap())
+    check_custom_test_mapping(0, preprocess_func_leap()[1])

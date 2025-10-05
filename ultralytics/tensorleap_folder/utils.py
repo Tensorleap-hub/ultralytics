@@ -11,7 +11,8 @@ from ultralytics.utils.plotting import output_to_target #doable
 
 
 def create_data_with_ult(cfg,yolo_data, phase='val'):
-    n_samples = len(os.listdir(yolo_data[phase]))
+    n_samples = sum(1 for _ in open(yolo_data[phase])) if yolo_data[phase].endswith(".txt") else len(
+        os.listdir(yolo_data[phase]))
     dataset = build_yolo_dataset(cfg, yolo_data[phase],n_samples , yolo_data, mode='val', stride=32)
     return dataset, n_samples
 
@@ -128,8 +129,18 @@ def validate_supported_models(pt_name,arch_name):
         "yolo11x","yolo11m", "yolo11n", "yolo11s",
         "yolo12l", "yolo12m", "yolo12n", "yolo12s"
     ]
-    if arch_name not in  supported_versions +['None_path']:
+    if Path(arch_name).stem not in  supported_versions +['None_path']:
         raise Exception(f"unsupported model. use one of {supported_versions} backbones")
-    if (pt_name not in supported_versions and arch_name not in supported_versions +['None_path']) or (pt_name in supported_versions and arch_name!=pt_name and arch_name !='None_path') :
+    if (pt_name not in supported_versions and Path(arch_name).stem not in supported_versions +['None_path']) or (pt_name in supported_versions and arch_name!=pt_name and arch_name !='None_path') :
         raise Exception(f"unsupported model. use one of {supported_versions} backbones")
 
+def get_dataset_split(phase, split_file):
+    data = np.load(split_file)
+
+    d = {
+        "val": data["val_idxs"],
+        "test": data["test_idxs"],
+        "train": data["train_labeled_idxs"],
+        "unlabeled": data["train_unlabeled_idxs"]
+    }
+    return [int(x) for x in d[phase]]

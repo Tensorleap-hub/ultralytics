@@ -1,8 +1,10 @@
+import os
+
 import torch
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric
 from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss,possible_float_like_nan_types,wanted_cls_dic, predictor
 from ultralytics.tensorleap_folder.utils import create_data_with_ult, pre_process_dataloader, \
-    update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs
+    update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, get_dataset_split
 from typing import List, Dict, Union
 import numpy as np
 from code_loader import leap_binder
@@ -12,17 +14,10 @@ from code_loader.contract.enums import LeapDataType, MetricDirection, ConfusionM
 from code_loader.visualizers.default_visualizers import LeapImage
 from code_loader.inner_leap_binder.leapbinder_decorators import (tensorleap_preprocess, tensorleap_gt_encoder,
                                                                  tensorleap_input_encoder, tensorleap_metadata,
-                                                                 tensorleap_custom_visualizer)
+                                                                 tensorleap_custom_visualizer,tensorleap_unlabeled_preprocess)
 from code_loader.contract.responsedataclasses import BoundingBox
 from code_loader.contract.visualizer_classes import LeapImageWithBBox
 from code_loader.utils import rescale_min_max
-
-from code_loader.contract.mapping import leap_output
-from code_loader.default_metrics import categorical_crossentropy
-from code_loader.visualizers.default_visualizers import default_image_visualizer
-
-
-
 from ultralytics.utils.plotting import output_to_target #doable
 from ultralytics.utils.metrics import box_iou #doable
 
@@ -37,19 +32,35 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
     if cfg.tensorleap_use_test:
         phases.append('test')
         dataset_types.append(DataStateType.test)
-    if cfg.tensorleap_use_unlabeled:
-        phases.append('unlabeled')
         dataset_types.append(DataStateType.unlabeled)
     for phase, dataset_type in zip(phases, dataset_types):
         data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase)
         responses.append(
-            PreprocessResponse(sample_ids=list(range(n_samples)),
+            PreprocessResponse(sample_ids= list(range(n_samples)) if not cfg.use_data_split_file[0] else get_dataset_split(phase,os.path.join(cfg.tensorleap_path,cfg.use_data_split_file[1])),
                                data={'dataloader':data_loader},
                                sample_id_type=int,
                                state=dataset_type))
     return responses
 
+@tensorleap_unlabeled_preprocess()
+def preprocess_unlabeled_func_leap() -> PreprocessResponse:
+    dataset_types = []
+    phases=[]
+    if cfg.tensorleap_use_unlabeled:
+        phases.append('unlabeled')
+        dataset_types.append(DataStateType.unlabeled)
+    else:
+         return PreprocessResponse(sample_ids=[],
+                           data={'dataloader': []},
+                           sample_id_type=int,
+                           state=None)
 
+    for phase, dataset_type in zip(phases, dataset_types):
+        data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase)
+        return PreprocessResponse(sample_ids=list(range(n_samples)) if not cfg.use_data_split_file[0] else get_dataset_split(phase,os.path.join(cfg.tensorleap_path,cfg.use_data_split_file[1])),
+                               data={'dataloader':data_loader},
+                               sample_id_type=int,
+                               state=dataset_type)
 # ------------------------------------------input and gt----------------------------------------------------------------
 
 @tensorleap_input_encoder('image',channel_dim=1)
