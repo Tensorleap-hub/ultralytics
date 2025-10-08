@@ -81,4 +81,5 @@ if __name__ == '__main__':
     plot_vis= False
     model_path = '/Users/orram/Tensorleap/ultralytics/yolo11s-pose.onnx'  # Choose None if only pt version available else, use your h5/onnx model's path.
     mapping_version = None # Set as  None if the model's name is supported by ultralytics. Else, set to the base yolo architecture name (e.x if your trained model has the same architecture as yolov11s set mapping_version=yolov11s ) .
-    check_custom_integration(43, preprocess_func_leap()[0])
+    for i in range(42,45):
+        check_custom_integration(i, preprocess_func_leap()[0])

@@ -93,6 +93,7 @@ ob_data_yaml=get_dataset_yaml(ob_cfg)
 ob_yolo_data=get_yolo_data(ob_cfg)
 criterion=get_criterion(Path(cfg.model),cfg)#problemtic
 all_clss=dataset_yaml["names"]
+ob_all_clss=ob_yolo_data["names"]
 cls_mapping = {v: k for k, v in all_clss.items()}
 wanted_cls_dic=get_wanted_cls(cls_mapping,cfg)
 predictor=get_predictor_obj(cfg,yolo_data)#problemtic

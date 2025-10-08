@@ -8,7 +8,7 @@ from numpy._typing import _32Bit
 from ultralytics.engine.results import Boxes
 from ultralytics.tensorleap_folder import keypoints_vis
 from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss, \
-    possible_float_like_nan_types, wanted_cls_dic, predictor, ob_yolo_data, ob_cfg
+    possible_float_like_nan_types, wanted_cls_dic, predictor, ob_yolo_data, ob_cfg, ob_all_clss
 from ultralytics.tensorleap_folder.utils import create_data_with_ult, pre_process_dataloader, \
     update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, pre_process_ob_dataloader
 from typing import List, Dict, Union, Any
@@ -105,39 +105,68 @@ def metadata_sample_index(idx: int, preprocess: PreprocessResponse) -> int:
 
 @tensorleap_metadata("image info a", metadata_type = possible_float_like_nan_types)
 def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str, int, float]]:
-    nan_default_value = None
+    nan_default_value = np.nan
     _, _, _, _, _, orig_shape = pre_process_dataloader(data, idx, predictor)
     gt_data = gt_encoder(idx, data)
     ob_gt_data = ob_gt_encoder(idx, data)
     cls_gt = np.expand_dims(gt_data[:, 4], axis=1)
     ob_cls_gt = np.expand_dims(ob_gt_data[:, 4], axis=1)
     bbox_gt = gt_data[:, :4]
+    kpts = gt_data[:, 5:]
+    kpts = kpts.reshape(kpts.shape[0], 17, 3)
     clss_info = np.unique(ob_cls_gt, return_counts=True)
+    ob_clss_info = np.unique(ob_cls_gt, return_counts=True)
+    pose_clss_info = np.unique(cls_gt, return_counts=True)
     num_preds = len(cls_gt) or nan_default_value
-    count_dict = update_dict_count_cls(all_clss, clss_info,nan_default_value)
+
+    count_dict = update_dict_count_cls(all_clss, pose_clss_info,nan_default_value)
+    ob_count_dict = update_dict_count_cls(ob_all_clss, ob_clss_info,nan_default_value)
+    if ob_count_dict["count of 'person' class (0)"] is not None:
+        pose_ob_people_ratio = float(count_dict["count of 'person' class (0)"]/ob_count_dict["count of 'person' class (0)"])
+        pose_ob_people_diff = float(ob_count_dict["count of 'person' class (0)"] - count_dict["count of 'person' class (0)"])
+        pose_ob_diff_to_total = float(pose_ob_people_diff/ob_count_dict["count of 'person' class (0)"])
+    else:
+        pose_ob_people_ratio = nan_default_value
+        pose_ob_people_diff = nan_default_value
+        pose_ob_diff_to_total = nan_default_value
     areas, aspect_ratios = bbox_area_and_aspect_ratio(bbox_gt, data.data['dataloader'][idx]['resized_shape'])
-    occlusion_matrix, areas_in_pixels, union_in_pixels = calculate_iou_all_pairs(bbox_gt, data.data['dataloader'][idx][
+    if len(cls_gt)>0:
+        occlusion_matrix, areas_in_pixels, union_in_pixels = calculate_iou_all_pairs(bbox_gt, data.data['dataloader'][idx][
         'resized_shape'])
-    no_nans_values = ~np.isnan(clss_info[0]).any()
+    else:
+        occlusion_matrix, areas_in_pixels, union_in_pixels = nan_default_value, nan_default_value, nan_default_value
+    no_nans_values = ~np.isnan(ob_clss_info[0]).any()
+    pose_no_nans_values = ~np.isnan(pose_clss_info[0]).any() and len(pose_clss_info[0])
     d = {
         "image path": data.data['dataloader'].im_files[idx],
         "idx": idx,
-        "# unique classes - ob": len(clss_info[0]) if no_nans_values else nan_default_value,
-        "# of objects - ob": int(clss_info[1].sum()) if no_nans_values else nan_default_value,
-        '# of pose predictions': int(num_preds),
-        "mean bbox area": float(areas.mean()) if no_nans_values else nan_default_value,
-        "var bbox area": float(areas.var()) if no_nans_values else nan_default_value,
-        "median bbox area": float(np.median(areas)) if no_nans_values else nan_default_value,
-        "max bbox area": float(np.max(areas)) if no_nans_values else nan_default_value,
-        "min bbox area": float(np.min(areas)) if no_nans_values else nan_default_value,
+        "# unique classes - ob": len(ob_clss_info[0]) if no_nans_values else nan_default_value,
+        "# of objects - ob": int(ob_clss_info[1].sum()) if no_nans_values else nan_default_value,
+        # Pose meta-data
+        "% pose visible": (kpts[:,:,-1]==2).mean() if pose_no_nans_values else nan_default_value,
+        "% pose all-vis people": ((kpts[:,:,-1]==2).mean(1)==1).sum() if pose_no_nans_values else nan_default_value,
+        "num headless": ((kpts[:,:,-1][:,:5]==2).mean(1) == 0).sum() if pose_no_nans_values else nan_default_value, #num of people with no single head related keypoint
+        "# of people with pose": int(num_preds) if pose_no_nans_values else nan_default_value,
+        # diffarence between object detection and pose labels
+        "pose-ob people ratio": pose_ob_people_ratio,
+        "pose-ob poeple diff": pose_ob_people_diff,
+        "pose-ob diff to total": pose_ob_diff_to_total,
+        # Pose box meta-data
+        "mean bbox area": float(areas.mean()) if pose_no_nans_values else nan_default_value,
+        "var bbox area": float(areas.var()) if pose_no_nans_values else nan_default_value,
+        "median bbox area": float(np.median(areas)) if pose_no_nans_values else nan_default_value,
+        "max bbox area": float(np.max(areas)) if pose_no_nans_values else nan_default_value,
+        "min bbox area": float(np.min(areas)) if pose_no_nans_values else nan_default_value,
         "bbox overlap": float(
-            occlusion_matrix.sum() / areas_in_pixels.sum()) if no_nans_values else nan_default_value,
+            occlusion_matrix.sum() / areas_in_pixels.sum()) if pose_no_nans_values else nan_default_value,
         "max bbox overlap": float(
-            (occlusion_matrix.sum(axis=1) / areas_in_pixels).max()) if no_nans_values else nan_default_value,
+            (occlusion_matrix.sum(axis=1) / areas_in_pixels).max()) if pose_no_nans_values else nan_default_value,
         "orig_H": orig_shape[0],
         "orig_W": orig_shape[1],
     }
-    d.update(**count_dict)
+
+    # d.update(**count_dict)
+    d.update(**ob_count_dict)
     return d
 
 
