@@ -13,7 +13,7 @@ from ultralytics.utils.plotting import output_to_target #doable
 
 def create_data_with_ult(cfg,yolo_data, phase='val'):
     n_samples = len(os.listdir(yolo_data[phase]))
-    n_samples = 100
+    # n_samples = (n_samples//4)*3
     dataset = build_yolo_dataset(cfg, yolo_data[phase],n_samples , yolo_data, mode='val', stride=32)
     return dataset, n_samples
 
