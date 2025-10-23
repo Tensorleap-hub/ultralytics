@@ -8,14 +8,14 @@ from code_loader.utils import rescale_min_max
 from code_loader.plot_functions.visualize import visualize
 
 from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
-                         leap_binder, loss, gt_bb_decoder, image_visualizer, bb_decoder,
-                         cost, metadata_per_img, ious, confusion_matrix_metric, draw_skeleton, get_matrices,
-                         draw_gt_skeleton, draw_gt_on_image)
+                        loss, image_visualizer,
+                         cost, draw_skeleton, get_matrices,
+                         draw_gt_skeleton)
 
 import onnxruntime as ort
 from ultralytics.tensorleap_folder.utils import extract_mapping
 
-from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_load_model, integration_test
+from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_load_model, tensorleap_integration_test
 labels = []
 for k in range(17):
     labels.append(f"x_{k}")
@@ -41,7 +41,7 @@ def load_model():
     return model
 
 
-@integration_test()
+@tensorleap_integration_test()
 def check_custom_integration(idx, subset):
     # if check_generic:
     #     leap_binder.check()

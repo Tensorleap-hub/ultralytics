@@ -13,7 +13,7 @@ from ultralytics.utils.plotting import output_to_target #doable
 
 def create_data_with_ult(cfg,yolo_data, phase='val'):
     n_samples = len(os.listdir(yolo_data[phase]))
-    # n_samples = (n_samples//4)*3
+    # n_samples = 2000
     dataset = build_yolo_dataset(cfg, yolo_data[phase],n_samples , yolo_data, mode='val', stride=32)
     return dataset, n_samples
 
@@ -41,8 +41,8 @@ def pred_post_process(y_pred, predictor, image, cfg):
 
 def update_dict_count_cls(all_clss,clss_info,nan_default_value):
     if np.isnan(clss_info[0]).any():
-        return {f"count of '{v}' class ({k})": nan_default_value   for k, v in all_clss.items()}
-    return {f"count of '{v}' class ({k})": int(clss_info[1][clss_info[0]==k]) if k in clss_info[0] else nan_default_value for k, v in all_clss.items()}
+        return {f"# '{v}' class ({k})": nan_default_value   for k, v in all_clss.items()}
+    return {f"# '{v}' class ({k})": int(clss_info[1][clss_info[0]==k]) if k in clss_info[0] else nan_default_value for k, v in all_clss.items()}
 
 def update_dict_bbox_cls_info(all_clss,info,clss_info,func_type='mean',task='area',nan_default_value=None):
     def get_mask(clss_info,k,info):

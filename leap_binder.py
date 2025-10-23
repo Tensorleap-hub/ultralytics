@@ -2,18 +2,15 @@ import copy
 
 import torch
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric
-from numpy import ndarray, dtype, floating
-from numpy._typing import _32Bit
+from numpy import ndarray, dtype
 
 from ultralytics.engine.results import Boxes
-from ultralytics.tensorleap_folder import keypoints_vis
 from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss, \
     possible_float_like_nan_types, wanted_cls_dic, predictor, ob_yolo_data, ob_cfg, ob_all_clss
 from ultralytics.tensorleap_folder.utils import create_data_with_ult, pre_process_dataloader, \
     update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, pre_process_ob_dataloader
 from typing import List, Dict, Union, Any
 import numpy as np
-from code_loader import leap_binder
 from code_loader.contract.datasetclasses import PreprocessResponse, DataStateType, SamplePreprocessResponse, \
     ConfusionMatrixElement
 from code_loader.contract.enums import LeapDataType, MetricDirection, ConfusionMatrixValue
@@ -28,9 +25,6 @@ from code_loader.utils import rescale_min_max
 from ultralytics.utils import ops
 from ultralytics.utils.plotting import output_to_target, Annotator  # doable
 from ultralytics.utils.metrics import box_iou #doable
-from ultralytics.utils.tal import make_anchors
-
-
 # ----------------------------------------------------data processing---------------------------------------------------
 
 @tensorleap_preprocess()
@@ -49,9 +43,8 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
         data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase)
         ob_data_loader, ob_n_samples = create_data_with_ult(ob_cfg, ob_yolo_data, phase=phase)
         responses.append(
-            PreprocessResponse(sample_ids=list(range(n_samples)),
+            PreprocessResponse(length=n_samples,
                                data={'dataloader':data_loader, "ob_dataloader": ob_data_loader},
-                               sample_id_type=int,
                                state=dataset_type))
     return responses
 
@@ -114,17 +107,16 @@ def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str,
     bbox_gt = gt_data[:, :4]
     kpts = gt_data[:, 5:]
     kpts = kpts.reshape(kpts.shape[0], 17, 3)
-    clss_info = np.unique(ob_cls_gt, return_counts=True)
     ob_clss_info = np.unique(ob_cls_gt, return_counts=True)
     pose_clss_info = np.unique(cls_gt, return_counts=True)
     num_preds = len(cls_gt) or nan_default_value
 
     count_dict = update_dict_count_cls(all_clss, pose_clss_info,nan_default_value)
     ob_count_dict = update_dict_count_cls(ob_all_clss, ob_clss_info,nan_default_value)
-    if ob_count_dict["count of 'person' class (0)"] is not None:
-        pose_ob_people_ratio = float(count_dict["count of 'person' class (0)"]/ob_count_dict["count of 'person' class (0)"])
-        pose_ob_people_diff = float(ob_count_dict["count of 'person' class (0)"] - count_dict["count of 'person' class (0)"])
-        pose_ob_diff_to_total = float(pose_ob_people_diff/ob_count_dict["count of 'person' class (0)"])
+    if ob_count_dict["# 'person' class (0)"] is not None:
+        pose_ob_people_ratio = float(count_dict["# 'person' class (0)"]/ob_count_dict["# 'person' class (0)"])
+        pose_ob_people_diff = float(ob_count_dict["# 'person' class (0)"] - count_dict["# 'person' class (0)"])
+        pose_ob_diff_to_total = float(pose_ob_people_diff/ob_count_dict["# 'person' class (0)"])
     else:
         pose_ob_people_ratio = nan_default_value
         pose_ob_people_diff = nan_default_value
@@ -137,6 +129,47 @@ def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str,
         occlusion_matrix, areas_in_pixels, union_in_pixels = nan_default_value, nan_default_value, nan_default_value
     no_nans_values = ~np.isnan(ob_clss_info[0]).any()
     pose_no_nans_values = ~np.isnan(pose_clss_info[0]).any() and len(pose_clss_info[0])
+    sports = {1: 'bicycle', 3: 'motorcycle', 30: 'skis', 31: 'snowboard', 32: 'sports ball', 34: 'baseball bat',
+              35: 'baseball glove',
+              36: 'skateboard',
+              37: 'surfboard',
+              38: 'tennis racket', }
+    sport_count = sum([ob_clss_info[1][i] for i in range(len(ob_clss_info[1])) if ob_clss_info[0][i] in sports ])
+    foods = { 60: 'dining table',  45: 'bowl',
+                 46: 'banana',
+                 47: 'apple',
+                 48: 'sandwich',
+                 49: 'orange',
+                 50: 'broccoli',
+                 51: 'carrot',
+                 52: 'hot dog',
+                 53: 'pizza',
+                 54: 'donut',
+                 55: 'cake',}
+    foods_count = sum([ob_clss_info[1][i] for i in range(len(ob_clss_info[1])) if ob_clss_info[0][i] in foods])
+    pets = { 15: 'cat',
+            16: 'dog',}
+    pets_count = sum([ob_clss_info[1][i] for i in range(len(ob_clss_info[1])) if ob_clss_info[0][i] in pets])
+    animals = {14: 'bird',
+                 15: 'cat',
+                 16: 'dog',
+                 17: 'horse',
+                 18: 'sheep',
+                 19: 'cow',
+                 20: 'elephant',
+                 21: 'bear',
+                 22: 'zebra',
+                 23: 'giraffe',}
+    animals_count = sum([ob_clss_info[1][i] for i in range(len(ob_clss_info[1])) if ob_clss_info[0][i] in animals])
+    vehicles = {1: 'bicycle',
+             2: 'car',
+             3: 'motorcycle',
+             4: 'airplane',
+             5: 'bus',
+             6: 'train',
+             7: 'truck',
+             8: 'boat',}
+    vehicles_count = sum([ob_clss_info[1][i] for i in range(len(ob_clss_info[1])) if ob_clss_info[0][i] in vehicles])
     d = {
         "image path": data.data['dataloader'].im_files[idx],
         "idx": idx,
@@ -146,11 +179,19 @@ def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str,
         "% pose visible": (kpts[:,:,-1]==2).mean() if pose_no_nans_values else nan_default_value,
         "% pose all-vis people": ((kpts[:,:,-1]==2).mean(1)==1).sum() if pose_no_nans_values else nan_default_value,
         "num headless": ((kpts[:,:,-1][:,:5]==2).mean(1) == 0).sum() if pose_no_nans_values else nan_default_value, #num of people with no single head related keypoint
-        "# of people with pose": int(num_preds) if pose_no_nans_values else nan_default_value,
+        "# of people with pose": float(num_preds) if pose_no_nans_values else float(0),
+        "crowd": int(num_preds > 5) if pose_no_nans_values else int(0),
         # diffarence between object detection and pose labels
         "pose-ob people ratio": pose_ob_people_ratio,
         "pose-ob poeple diff": pose_ob_people_diff,
         "pose-ob diff to total": pose_ob_diff_to_total,
+        # scene
+        "# sport objects": sport_count,
+        "sport": int(sport_count>0),
+        "food": int(foods_count>0),
+        "pet": int(pets_count>0),
+        "animal": int(animals_count>0),
+        "vehicle": int(vehicles_count>0),
         # Pose box meta-data
         "mean bbox area": float(areas.mean()) if pose_no_nans_values else nan_default_value,
         "var bbox area": float(areas.var()) if pose_no_nans_values else nan_default_value,
@@ -189,7 +230,7 @@ def postprocess(pred: np.ndarray,
     return preds
 # ----------------------------------------------------------loss--------------------------------------------------------
 
-@tensorleap_custom_loss(name="fantastic_loss")
+@tensorleap_custom_loss(name="total_loss")
 def loss(pred8_0,pred40,pred20, keypoints_pred, gt, exm_pred):
     # return np.zeros(1)
     d={}
@@ -439,7 +480,9 @@ def cost(pred80,pred40,pred20,keypoints_pred, gt):
     d["batch_idx"] = torch.zeros_like(d['cls'])
     y_pred_torch = [torch.from_numpy(s) for s in [pred80,pred40,pred20]]
     y_pred_torch = [y_pred_torch, torch.from_numpy(keypoints_pred)]
-    _,loss_parts= criterion(y_pred_torch, d) # loss(box, pose, kobj, cls, dfl)
+    _,loss_parts = criterion(y_pred_torch, d) # loss(box, pose, kobj, cls, dfl)
+    # Find stats of cases where image with no persons was detected as having a person
+
     return {"box":loss_parts[0].unsqueeze(0).numpy(), "pose": loss_parts[1].unsqueeze(0).numpy(),
             "kobj": loss_parts[2].unsqueeze(0).numpy(), "cls":loss_parts[3].unsqueeze(0).numpy(),
             "dfl":loss_parts[4].unsqueeze(0).numpy()}
@@ -457,7 +500,7 @@ def get_matrices(pred: np.ndarray, feat80: np.ndarray, feat40: np.ndarray, feat2
     preds = postprocess(pred, feat80, feat40, feat20, kpts)
     stats = {'precision(B)': default_value, 'recall(B)': default_value, 'mAP50(B)': default_value,
              'mAP50-95(B)': default_value, 'precision(P)': default_value, 'recall(P)': default_value,
-             'mAP50(P)': default_value, 'mAP50-95(P)': default_value, 'fitness': default_value}
+             'mAP50(P)': default_value, 'mAP50-95(P)': default_value, 'fitness': default_value, 'FP_human': default_value,}
 
     if all(len(preds[i]) == 0 for i in range(len(preds))):
         return stats

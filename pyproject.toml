@@ -30,7 +30,7 @@ py-cpuinfo = "*"
 pandas = ">=1.1.4"
 seaborn = ">=0.11.0"
 ultralytics-thop = ">=2.0.0"
-code-loader = "1.0.132.dev1"
+code-loader = "1.0.138"
 code-loader-helpers = "^1.0.20"
 onnx2keras = "^0.0.24"
 [tool.poetry.group.dev.dependencies]

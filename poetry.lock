@@ -803,13 +803,13 @@ testing = ["pytest (>=7.2.1)", "pytest-cov (>=4.0.0)", "tox (>=4.4.3)"]
 
 [[package]]
 name = "code-loader"
-version = "1.0.132.dev1"
+version = "1.0.138"
 description = ""
 optional = false
 python-versions = "<3.13,>=3.8"
 files = [
-    {file = "code_loader-1.0.132.dev1-py3-none-any.whl", hash = "sha256:e02f9d87136fcf9b296dcc80daecd05bdbabe631b446c5acc088f05c2fb84c59"},
-    {file = "code_loader-1.0.132.dev1.tar.gz", hash = "sha256:3ff692d76f5d163301b01486ba09a5a17cf82e65bedd63cab75c32b57e723cb7"},
+    {file = "code_loader-1.0.138-py3-none-any.whl", hash = "sha256:e455a36ab4843e7af5fbfe67a8ae7336c6426b29d85faf67b21adccf87de24a7"},
+    {file = "code_loader-1.0.138.tar.gz", hash = "sha256:169d0d03feccfdf3aefcdd29484ed411de4d11c90ff93ccc3a1f7f0d71ad7aa1"},
 ]
 
 [package.dependencies]
@@ -6975,4 +6975,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.11"
-content-hash = "7f42ef507f276a2150ea82c88d5b7088d5323cddcf19b4dd0a6fc28cdb580353"
+content-hash = "bbcd3ef458ad1fc8f0e8b86efceeb96ad1eced5c1845f84f3dda856c8167ff33"
