@@ -82,33 +82,35 @@ Despite the dataset being biased toward images without people, the model often p
 
 ## 🏟️ Insight 2 — Label Inconsistencies in Stadium Scenes  
 
-### Label Inconsistencies  
+### Label Inconsistencies
+**Figure 5:** Insight detection panel - Right - Identification alert in the platform highlights the affected matrices and number of scenes, on the bottom correlated meta-data is shown. Left - Population latent space, highlighted in white circle are the member examples of the insight.  
+![Figure 5](./figs/fig5a_crowed_insight.png)
 
 Another cluster shows degradation across all losses—**box, pose, keypoint-objectness, and class**—and correlates with **sports and stadium scenes** containing many people.  
 Inspection of COCO annotations reveals **inconsistent labeling**: spectators are often unlabeled or partially annotated.  
 
 By comparing **object-detection (OB)** and **pose** ground truth, we find a **median gap of 13 people per image**, exposing inconsistencies in what annotators labeled (players vs. full crowds).  
 
-**Figure 5:** Examples of partial crowd labeling. Red rectangles mark labeled spectators; blue mark unlabeled ones.  
-![Figure 5](./figs/fig5_crowd_labels.png)
+**Figure 6:** Examples of partial crowd labeling. Red rectangles mark labeled spectators; blue mark unlabeled ones.  
+![Figure 6](./figs/fig5_crowd_labels.png)
 
 This leads to contradictory training signals: the model is penalized for missing unlabeled spectators yet also for predicting them.  
 Activation heatmaps confirm that the model attends to both players and crowds, showing confusion about what constitutes a “valid” person-with-pose.”  
 
-**Figure 6:** Heatmaps showing model focus on labeled and unlabeled humans in crowd scenes.  
-![Figure 6](./figs/fig6_heatmaps.png)
+**Figure 7:** Heatmaps showing model focus on labeled and unlabeled humans in crowd scenes.  
+![Figure 7](./figs/fig6_heatmaps.png)
 
 ### Quantifying the Impact of Crowding  
 
 While higher pose loss might seem due to complex sports motion, analysis shows it stems mainly from **unlabeled background people**.  
 Crowded scenes (>4 people) show **3× higher pose loss** than isolated scenes.  
 
-**Figure 7:** Pose loss vs. crowd density in baseball scenes.  
-![Figure 7](./figs/fig7_pose_loss_vs_crowd.png)
+**Figure 8:** Pose loss vs. crowd density in baseball scenes.  
+![Figure 8](./figs/fig7_pose_loss_vs_crowd.png)
 
 Nearly identical player poses yield losses of **0.3 vs. 2.0**, depending on the crowd labeling.  
-**Figure 8:** Comparison of baseball scenes with and without crowds.  
-![Figure 8](./figs/fig8_baseball_comparison.png)
+**Figure 9:** Comparison of baseball scenes with and without crowds.  
+![Figure 9](./figs/fig8_baseball_comparison.png)
 
 These results indicate that **label noise, not pose difficulty**, drives much of the observed degradation.
 
