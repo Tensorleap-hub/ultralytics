@@ -803,30 +803,31 @@ testing = ["pytest (>=7.2.1)", "pytest-cov (>=4.0.0)", "tox (>=4.4.3)"]
 
 [[package]]
 name = "code-loader"
-version = "1.0.108"
+version = "1.0.139"
 description = ""
 optional = false
-python-versions = "<3.12,>=3.8"
+python-versions = "<3.13,>=3.8"
 files = [
-    {file = "code_loader-1.0.108-py3-none-any.whl", hash = "sha256:14cd1f0460d081022f0d69eaf5d9f72f3f22392d836ea1e103a1f003819f419b"},
-    {file = "code_loader-1.0.108.tar.gz", hash = "sha256:be8248b4bc1745b97da380c743b5e29c89f009e8b3c661fae5f875d300ea0a89"},
+    {file = "code_loader-1.0.139-py3-none-any.whl", hash = "sha256:883e3b79d644fb52cf5a67495326098724fd50885e79b0df393ac72e9dfca4d9"},
+    {file = "code_loader-1.0.139.tar.gz", hash = "sha256:69dbaaef6fcb90ab560aeb2a7aae9d5314cee2b8e8e52b381ef504e96722c288"},
 ]
 
 [package.dependencies]
-numpy = ">=1.22.3,<2.0.0"
+mixpanel = ">=4.10.0,<5.0.0"
+numpy = {version = ">=1.22.3,<2.0.0", markers = "python_version >= \"3.8\" and python_version < \"3.11\""}
 psutil = ">=5.9.5,<6.0.0"
 pyyaml = ">=6.0.2,<7.0.0"
 requests = ">=2.32.3,<3.0.0"
 
 [[package]]
 name = "code-loader-helpers"
-version = "1.0.21"
+version = "1.0.35"
 description = ""
 optional = false
 python-versions = "<3.11,>=3.8"
 files = [
-    {file = "code_loader_helpers-1.0.21-py3-none-any.whl", hash = "sha256:3435fb4ac3835216484903a04f1551731a68533042e74b41a60cacd2cb86ae7b"},
-    {file = "code_loader_helpers-1.0.21.tar.gz", hash = "sha256:7f7d776f2e70ecbbb8774fb05a9d89135ea569481b418ce62c5d9116a9adbbe8"},
+    {file = "code_loader_helpers-1.0.35-py3-none-any.whl", hash = "sha256:ca4f993c8661e4e74d410b0eb3f3f8f9e0680ecf7b3841069cb48eba9add281f"},
+    {file = "code_loader_helpers-1.0.35.tar.gz", hash = "sha256:16888c51f77a75e85a18035937b8501bb156e63b8b026f9bb1c7c88cc61a4f35"},
 ]
 
 [package.dependencies]
@@ -835,7 +836,7 @@ matplotlib = ">=3.3.4"
 opencv-python = ">=4.5.5,<5.0.0"
 scikit-image = ">=0.19.2,<0.20.0"
 tensorflow = {version = ">=2.0,<3.0", markers = "platform_machine == \"x86_64\""}
-tensorflow-macos = {version = ">=2.5,<2.15.1 || >2.15.1,<3.0", markers = "platform_machine == \"arm64\""}
+tensorflow-macos = {version = ">=2.5,<3.0", markers = "platform_machine == \"arm64\""}
 torch = ">=1.4.0,<=2.1.0"
 
 [[package]]
@@ -3032,6 +3033,24 @@ files = [
     {file = "mergedeep-1.3.4-py3-none-any.whl", hash = "sha256:70775750742b25c0d8f36c55aed03d24c3384d17c951b3175d898bd778ef0307"},
     {file = "mergedeep-1.3.4.tar.gz", hash = "sha256:0096d52e9dad9939c3d975a774666af186eda617e6ca84df4c94dec30004f2a8"},
 ]
+
+[[package]]
+name = "mixpanel"
+version = "4.11.1"
+description = "Official Mixpanel library for Python"
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "mixpanel-4.11.1-py3-none-any.whl", hash = "sha256:130633fb7d65f1fea10a9b6a6d3b8239121f2039ff2280ceb97cb9a73a711f29"},
+    {file = "mixpanel-4.11.1.tar.gz", hash = "sha256:96440d36c30ce9a845141302b6249ac1c6dccc097ce20d480100c6a1041ce78e"},
+]
+
+[package.dependencies]
+requests = ">=2.4.2,<3"
+
+[package.extras]
+dev = ["build", "ghp-import", "sphinx", "tox (>=4.28.4)", "twine"]
+test = ["pytest (>=8.4.1)", "responses (>=0.25.8)"]
 
 [[package]]
 name = "mkdocs"
@@ -6956,4 +6975,4 @@ testing = ["coverage[toml]", "zope.event", "zope.testing"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9,<3.11"
-content-hash = "bb9577648d88709faa2cb553a496cf8cc9773f3ea9bd0a3c7c81a46515d4cabd"
+content-hash = "1a3e7b85cda2d015b03fc994a01191df22444b2444381d28473dfd08f1bdec39"

@@ -9,10 +9,10 @@ tensorleap_path: /Users/yamtawachi/tensorleap/datasets  #folder where coco datas
 tensorleap_use_test: False
 tensorleap_use_unlabeled: True
 # Train settings -------------------------------------------------------------------------------------------------------
-model: models/yolo11s.pt  # set to the core of your.h5 model
-data: /Users/yamtawachi/tensorleap/datasets/VOC/od_bench_check.yaml # (str, optional) path to data file, i.e. coco8.yaml i.e /Users/yamtawachi/tensorleap/datasets/VOC/od_bench_check.yaml
+model: models/yolo12s.pt  # set to the core of your.h5 model
+data: coco128.yaml #/Users/yamtawachi/tensorleap/datasets/VOC/od_bench_check.yaml # (str, optional) path to data file, i.e. coco8.yaml i.e /Users/yamtawachi/tensorleap/datasets/VOC/od_bench_check.yaml
 use_data_split_file:
-  - True
+  - False
   - dataset_split_bad_init_pool.npz
 wanted_cls:  # List(str) i.e [person , car , bowl , bed , broccoli], Metadata is calculated individually for each these class.
 epochs: 100 # (int) number of epochs to train for

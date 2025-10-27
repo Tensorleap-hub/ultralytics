@@ -1,5 +1,4 @@
 import os
-
 import torch
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric
 from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss,possible_float_like_nan_types,wanted_cls_dic, predictor
@@ -7,7 +6,6 @@ from ultralytics.tensorleap_folder.utils import create_data_with_ult, pre_proces
     update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, get_dataset_split
 from typing import List, Dict, Union
 import numpy as np
-from code_loader import leap_binder
 from code_loader.contract.datasetclasses import PreprocessResponse, DataStateType, SamplePreprocessResponse, \
     ConfusionMatrixElement
 from code_loader.contract.enums import LeapDataType, MetricDirection, ConfusionMatrixValue
@@ -18,8 +16,8 @@ from code_loader.inner_leap_binder.leapbinder_decorators import (tensorleap_prep
 from code_loader.contract.responsedataclasses import BoundingBox
 from code_loader.contract.visualizer_classes import LeapImageWithBBox
 from code_loader.utils import rescale_min_max
-from ultralytics.utils.plotting import output_to_target #doable
-from ultralytics.utils.metrics import box_iou #doable
+from ultralytics.utils.plotting import output_to_target
+from ultralytics.utils.metrics import box_iou
 
 
 # ----------------------------------------------------data processing---------------------------------------------------
@@ -32,6 +30,8 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
     if cfg.tensorleap_use_test:
         phases.append('test')
         dataset_types.append(DataStateType.test)
+    if cfg.tensorleap_use_unlabeled:
+        phases.append('unlabeled')
         dataset_types.append(DataStateType.unlabeled)
     for phase, dataset_type in zip(phases, dataset_types):
         data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase)
@@ -42,25 +42,7 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
                                state=dataset_type))
     return responses
 
-@tensorleap_unlabeled_preprocess()
-def preprocess_unlabeled_func_leap() -> PreprocessResponse:
-    dataset_types = []
-    phases=[]
-    if cfg.tensorleap_use_unlabeled:
-        phases.append('unlabeled')
-        dataset_types.append(DataStateType.unlabeled)
-    else:
-         return PreprocessResponse(sample_ids=[],
-                           data={'dataloader': []},
-                           sample_id_type=int,
-                           state=None)
 
-    for phase, dataset_type in zip(phases, dataset_types):
-        data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase)
-        return PreprocessResponse(sample_ids=list(range(n_samples)) if not cfg.use_data_split_file[0] else get_dataset_split(phase,os.path.join(cfg.tensorleap_path,cfg.use_data_split_file[1])),
-                               data={'dataloader':data_loader},
-                               sample_id_type=int,
-                               state=dataset_type)
 # ------------------------------------------input and gt----------------------------------------------------------------
 
 @tensorleap_input_encoder('image',channel_dim=1)
@@ -71,6 +53,8 @@ def input_encoder(idx: int, preprocess: PreprocessResponse) -> np.ndarray:
 
 @tensorleap_gt_encoder('classes')
 def gt_encoder(idx: int, preprocessing: PreprocessResponse) -> np.ndarray:
+    if preprocessing.state == DataStateType.unlabeled:
+        return np.full((1, 5), np.nan,dtype=np.float32)
     _, clss, bboxes, _ =pre_process_dataloader(preprocessing, idx,predictor)
     if clss.shape[0]==0 and  bboxes.shape[0]==0:
         return np.full((1, 5), np.nan,dtype=np.float32)
@@ -97,7 +81,6 @@ def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str,
     gt_data = gt_encoder(idx, data)
     cls_gt = np.expand_dims(gt_data[:, 4], axis=1)
     bbox_gt = gt_data[:, :4]
-    print(f"bbox_gt {bbox_gt.shape}")
     clss_info = np.unique(cls_gt, return_counts=True)
     count_dict = update_dict_count_cls(all_clss, clss_info,nan_default_value)
     areas, aspect_ratios = bbox_area_and_aspect_ratio(bbox_gt, data.data['dataloader'][idx]['resized_shape'])
@@ -283,13 +266,4 @@ def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResp
     return [confusion_matrix_elements]
 # ---------------------------------------------------------main------------------------------------------------------
 
-
-
-leap_binder.add_prediction(name='object detection', labels=["x", "y", "w", "h"] + [cl for cl in all_clss.values()], channel_dim=1)
-leap_binder.add_prediction(name='concatenate_20', labels=[str(i) for i in range(20)], channel_dim=-1)
-leap_binder.add_prediction(name='concatenate_40', labels=[str(i) for i in range(40)], channel_dim=-1)
-leap_binder.add_prediction(name='concatenate_80', labels=[str(i) for i in range(80)], channel_dim=-1)
-
-if __name__ == '__main__':
-    leap_binder.check()
 
