@@ -1,24 +1,44 @@
+
 import os
-from code_loader.contract.datasetclasses import SamplePreprocessResponse
-from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
-                         loss, gt_bb_decoder, image_visualizer, bb_decoder,
-                         cost, metadata_per_img, ious, confusion_matrix_metric)
+from code_loader.contract.datasetclasses import SamplePreprocessResponse,PredictionTypeHandler
+from ultralytics.tensorleap_folder.global_params import cfg, all_clss
+from registry import TASK_BINDERS
+leap_binder = TASK_BINDERS[cfg.task]
 import onnxruntime as ort
 import numpy as np
 from ultralytics.tensorleap_folder.utils import validate_supported_models
-from ultralytics.tensorleap_folder.global_params import cfg, all_clss
 from code_loader.plot_functions.visualize import visualize
 from code_loader.contract.datasetclasses import PredictionTypeHandler
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_load_model, tensorleap_integration_test
 
-prediction_type1 = PredictionTypeHandler(name='object detection', labels=["x", "y", "w", "h"] + [cl for cl in all_clss.values()], channel_dim=1)
-prediction_type2 = PredictionTypeHandler(name='concatenate_20', labels=[str(i) for i in range(20)], channel_dim=-1)
-prediction_type3 = PredictionTypeHandler(name='concatenate_40', labels=[str(i) for i in range(40)], channel_dim=-1)
-prediction_type4 = PredictionTypeHandler(name='concatenate_80', labels=[str(i) for i in range(80)], channel_dim=-1)
 
-@tensorleap_load_model([prediction_type1,prediction_type2,prediction_type3,prediction_type4])
+if cfg.task=="pose":
+    labels = []
+    for k in range(17):
+        labels.append(f"x_{k}")
+        labels.append(f"y_{k}")
+        labels.append(f"v_{k}")
+    prediction_type1 = PredictionTypeHandler('output', labels=["x", "y", "w", "h", "0"] + labels, channel_dim=1)
+    prediction_type2 = PredictionTypeHandler('feat_a', labels=[str(i) for i in range(65)], channel_dim=1)
+    prediction_type3 = PredictionTypeHandler('feat_b', labels=[str(i) for i in range(65)], channel_dim=1)
+    prediction_type4 = PredictionTypeHandler('feat_c', labels=[str(i) for i in range(65)], channel_dim=1)
+    prediction_type5 = PredictionTypeHandler(name="key_points", labels=labels, channel_dim=1)
+    all_predictions=[prediction_type1, prediction_type2, prediction_type3, prediction_type4, prediction_type5]
+else:
+    prediction_type1 = PredictionTypeHandler(name='object detection',
+                                             labels=["x", "y", "w", "h"] + [cl for cl in all_clss.values()],
+                                             channel_dim=1)
+    prediction_type2 = PredictionTypeHandler(name='concatenate_20', labels=[str(i) for i in range(20)],
+                                             channel_dim=-1)
+    prediction_type3 = PredictionTypeHandler(name='concatenate_40', labels=[str(i) for i in range(40)],
+                                             channel_dim=-1)
+    prediction_type4 = PredictionTypeHandler(name='concatenate_80', labels=[str(i) for i in range(80)],
+                                             channel_dim=-1)
+    all_predictions=[prediction_type1, prediction_type2, prediction_type3, prediction_type4]
+
+
+@tensorleap_load_model(all_predictions)
 def load_model():
-    model_path="/Users/yamtawachi/tensorleap/ultralytics/yolo11s.onnx"
     m_path = model_path if model_path != None else 'None_path'
     print("started custom tests")
     validate_supported_models(os.path.basename(cfg.model), m_path)
@@ -32,29 +52,31 @@ def load_model():
 @tensorleap_integration_test()
 def check_custom_test_mapping(idx, subset):
     s_prepro = SamplePreprocessResponse(np.array(idx), subset)
-    image = input_encoder(idx, subset)
+    image = leap_binder.input_encoder(idx, subset)
     model = load_model()
     y_pred = model.run(None, {'images': image})
     # get gt
-    gt = gt_encoder(idx, subset)
+    gt = leap_binder.gt_encoder(idx, subset)#
     # custom metrics
-    # if not subset.state==DataStateType.unlabeled:
-    total_loss=loss(y_pred[1],y_pred[2],y_pred[3],gt ,y_pred[0])
-    cost_dic=cost(y_pred[1],y_pred[2],y_pred[3],gt)
-    iou=ious(y_pred[0], s_prepro)
-    conf_mat = confusion_matrix_metric(y_pred[0], s_prepro)
-    # metadata
-    meta_data=metadata_per_img(idx, subset)
+    total_loss=leap_binder.loss(*y_pred,gt)#
+    cost_dic=leap_binder.cost(*y_pred,gt)#
+    matrices = leap_binder.get_matrices(*y_pred, s_prepro)  #
+
+    if not cfg.task=="pose":#
+        conf_mat = leap_binder.confusion_matrix_metric(y_pred[0], s_prepro)#
+        # metadata
+        meta_data=leap_binder.metadata_per_img(idx, subset)#
     # vis
-    img_vis=image_visualizer(image)
-    pred_img=bb_decoder(image,y_pred[0])
-    gt_img = gt_bb_decoder(image, gt)
-    visualize(img_vis)
-    visualize(pred_img)
-    visualize(gt_img)
+    img_vis=leap_binder.image_visualizer(image)#
+    pred_img=leap_binder.pred_decoder(image,*y_pred,s_prepro) #
+    gt_img = leap_binder.gt_bb_decoder(image, gt, data=s_prepro)#
+    visualize(img_vis)#
+    visualize(pred_img)#
+    visualize(gt_img)#
 
 
 
 if __name__ == '__main__':
-    check_custom_test_mapping(0, preprocess_func_leap()[1])
-    check_custom_test_mapping(0, preprocess_func_leap()[2])
+    model_path="/Users/yamtawachi/tensorleap/ultralytics/yolo11s.onnx"
+    check_custom_test_mapping(0, leap_binder.preprocess_func_leap()[1])
+    check_custom_test_mapping(0, leap_binder.preprocess_func_leap()[2])
