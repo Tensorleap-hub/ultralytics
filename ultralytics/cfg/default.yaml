@@ -7,10 +7,13 @@ task: detect # (str) YOLO task, i.e. detect, segment, classify, pose, obb
 mode: val # (str) YOLO mode, i.e. train, val, predict, export, track, benchmark
 tensorleap_path: /Users/yamtawachi/tensorleap/datasets  #folder where coco dataset folder will be created --TENSORLEAP FLAG
 tensorleap_use_test: False
-tensorleap_use_unlabeled: False
+tensorleap_use_unlabeled: True
 # Train settings -------------------------------------------------------------------------------------------------------
 model: models/yolo11s.pt  # set to the core of your.h5 model
-data: coco128.yaml # (str, optional) path to data file, i.e. coco8.yaml
+data: coco128.yaml #/Users/yamtawachi/tensorleap/datasets/VOC/od_bench_check.yaml # (str, optional) path to data file, i.e. coco8.yaml i.e /Users/yamtawachi/tensorleap/datasets/VOC/od_bench_check.yaml
+use_data_split_file:
+  - False
+  - dataset_split_bad_init_pool.npz
 wanted_cls:  # List(str) i.e [person , car , bowl , bed , broccoli], Metadata is calculated individually for each these class.
 epochs: 100 # (int) number of epochs to train for
 time: # (float, optional) number of hours to train for, overrides epochs if supplied

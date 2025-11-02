@@ -43,5 +43,3 @@ def onnx_exporter(h5=False):
     exported_model_path=yolo_version_check(model_path)
     print(f"Model exported to ONNX: {exported_model_path}")
     return str(exported_model_path)
-if __name__ == '__main__':
-    onnx_exporter()
