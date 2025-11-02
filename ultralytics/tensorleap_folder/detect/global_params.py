@@ -73,7 +73,7 @@ def set_cfg_dict():
     else:
         return config_dict
 
-cfg = set_cfg_dict()
+from ultralytics.tensorleap_folder.get_cfg import cfg
 yolo_data=get_yolo_data(cfg) #doable
 dataset_yaml=get_dataset_yaml(cfg)#doable
 criterion=get_criterion(Path(cfg.model),cfg)#problemtic

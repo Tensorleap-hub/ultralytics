@@ -5,26 +5,24 @@ from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custo
 from numpy import ndarray, dtype
 
 from ultralytics.engine.results import Boxes
-from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss, \
+from ultralytics.tensorleap_folder.pose.global_params import cfg, yolo_data, criterion, all_clss, \
     possible_float_like_nan_types, wanted_cls_dic, predictor, ob_yolo_data, ob_cfg, ob_all_clss
-from ultralytics.tensorleap_folder.utils import create_data_with_ult, pre_process_dataloader, \
+from ultralytics.tensorleap_folder.pose.utils import create_data_with_ult, pre_process_dataloader, \
     update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, pre_process_ob_dataloader
 from typing import List, Dict, Union, Any
 import numpy as np
-from code_loader.contract.datasetclasses import PreprocessResponse, DataStateType, SamplePreprocessResponse, \
-    ConfusionMatrixElement
-from code_loader.contract.enums import LeapDataType, MetricDirection, ConfusionMatrixValue
+from code_loader.contract.datasetclasses import PreprocessResponse, DataStateType, SamplePreprocessResponse
+from code_loader.contract.enums import LeapDataType, MetricDirection
 from code_loader.visualizers.default_visualizers import LeapImage
 from code_loader.inner_leap_binder.leapbinder_decorators import (tensorleap_preprocess, tensorleap_gt_encoder,
                                                                  tensorleap_input_encoder, tensorleap_metadata,
                                                                  tensorleap_custom_visualizer)
-from code_loader.contract.responsedataclasses import BoundingBox
-from code_loader.contract.visualizer_classes import LeapImageWithBBox
 from code_loader.utils import rescale_min_max
 
 from ultralytics.utils import ops
-from ultralytics.utils.plotting import output_to_target, Annotator  # doable
-from ultralytics.utils.metrics import box_iou #doable
+from ultralytics.utils.plotting import Annotator  # doable
+
+
 # ----------------------------------------------------data processing---------------------------------------------------
 
 @tensorleap_preprocess()

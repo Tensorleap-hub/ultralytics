@@ -167,4 +167,4 @@ To support the hypothesis that inconsistent book labeling significantly affects 
 This analysis showed how Tensorleap can uncover hidden patterns and problems in complex models and datasets like YOLOv11 and COCO. By exploring latent space, metadata correlations, and model attention, we identified key performance issues such as overfitting, small object detection challenges, and labeling inconsistencies. These insights help guide targeted improvements, turning raw metrics into actionable understanding.
 ## Next Steps
 * Curious how you can benefit from Tensorleap? [Reach out for a demo](https://tensorleap.ai/request-demo/).
-* Want to explore this Tensorleap use-case yourself? [Step-by-Step Guide](ultralytics/tensorleap_folder/README.md).
+* Want to explore this Tensorleap use-case yourself? [Step-by-Step Guide](ultralytics/tensorleap_folder/pose/README.md).

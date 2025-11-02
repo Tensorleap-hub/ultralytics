@@ -1,12 +1,9 @@
-
+from ultralytics.tensorleap_folder.get_cfg import cfg
+from registry import leap_binder,global_params,utils
 import os
-from code_loader.contract.datasetclasses import SamplePreprocessResponse,PredictionTypeHandler
-from ultralytics.tensorleap_folder.global_params import cfg, all_clss
-from registry import TASK_BINDERS
-leap_binder = TASK_BINDERS[cfg.task]
+from code_loader.contract.datasetclasses import SamplePreprocessResponse
 import onnxruntime as ort
 import numpy as np
-from ultralytics.tensorleap_folder.utils import validate_supported_models
 from code_loader.plot_functions.visualize import visualize
 from code_loader.contract.datasetclasses import PredictionTypeHandler
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_load_model, tensorleap_integration_test
@@ -26,7 +23,7 @@ if cfg.task=="pose":
     all_predictions=[prediction_type1, prediction_type2, prediction_type3, prediction_type4, prediction_type5]
 else:
     prediction_type1 = PredictionTypeHandler(name='object detection',
-                                             labels=["x", "y", "w", "h"] + [cl for cl in all_clss.values()],
+                                             labels=["x", "y", "w", "h"] + [cl for cl in global_params.all_clss.values()],
                                              channel_dim=1)
     prediction_type2 = PredictionTypeHandler(name='concatenate_20', labels=[str(i) for i in range(20)],
                                              channel_dim=-1)
@@ -41,7 +38,7 @@ else:
 def load_model():
     m_path = model_path if model_path != None else 'None_path'
     print("started custom tests")
-    validate_supported_models(os.path.basename(cfg.model), m_path)
+    utils.validate_supported_models(os.path.basename(cfg.model), m_path)
     if not os.path.exists(m_path):
         from export_model_to_tf import onnx_exporter  # TODO - currently supports only onnx
         m_path = onnx_exporter()
@@ -63,13 +60,12 @@ def check_custom_test_mapping(idx, subset):
     matrices = leap_binder.get_matrices(*y_pred, s_prepro)  #
 
     if not cfg.task=="pose":#
-        conf_mat = leap_binder.confusion_matrix_metric(y_pred[0], s_prepro)#
         # metadata
         meta_data=leap_binder.metadata_per_img(idx, subset)#
     # vis
     img_vis=leap_binder.image_visualizer(image)#
-    pred_img=leap_binder.pred_decoder(image,*y_pred,s_prepro) #
-    gt_img = leap_binder.gt_bb_decoder(image, gt, data=s_prepro)#
+    pred_img=leap_binder.pred_visualizer(image,*y_pred,s_prepro) #
+    gt_img = leap_binder.gt_visualizer(image, gt, data=s_prepro)#
     visualize(img_vis)#
     visualize(pred_img)#
     visualize(gt_img)#

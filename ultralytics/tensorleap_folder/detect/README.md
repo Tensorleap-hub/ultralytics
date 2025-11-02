@@ -173,13 +173,13 @@ Before running the project, make sure to configure it properly. Follow these ste
    - Open the menu (☰ hamburger icon) and go to **Settings**.
    - Ensure the **Build Dynamic Dependencies** toggle is switched **on**.
 
-   ![Build Dynamic Dependencies](assets/pipin_button.png)
+   ![Build Dynamic Dependencies](../assets/pipin_button.png)
 
 2. **Generate a New CLI Token**  
    - From the same menu (☰ hamburger icon), select **CLI Token**.
    - Generate a new token and **copy it** to use later in the CLI.
 
-   ![Generate CLI Token](assets/token_button.png)
+   ![Generate CLI Token](../assets/token_button.png)
 
 If you intend to use Cases 2 or 3b follow the next steps to configure your local poetry env.
 

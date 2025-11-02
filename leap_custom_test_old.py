@@ -8,8 +8,8 @@ import tensorflow as tf
 import onnxruntime as ort
 import numpy as np
 from code_loader.helpers import visualize
-from ultralytics.tensorleap_folder.utils import extract_mapping, validate_supported_models
-from ultralytics.tensorleap_folder.global_params import cfg
+from ultralytics.tensorleap_folder.pose.utils import extract_mapping, validate_supported_models
+from ultralytics.tensorleap_folder.pose.global_params import cfg
 
 
 def check_custom_test():

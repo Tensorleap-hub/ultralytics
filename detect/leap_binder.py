@@ -1,8 +1,8 @@
 import os
 import torch
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric
-from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss,possible_float_like_nan_types,wanted_cls_dic, predictor
-from ultralytics.tensorleap_folder.utils import create_data_with_ult, pre_process_dataloader, \
+from ultralytics.tensorleap_folder.detect.global_params import cfg, yolo_data, criterion, all_clss,possible_float_like_nan_types,wanted_cls_dic, predictor
+from ultralytics.tensorleap_folder.detect.utils import create_data_with_ult, pre_process_dataloader, \
     update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, get_dataset_split
 from typing import List, Dict, Union
 import numpy as np
@@ -12,7 +12,7 @@ from code_loader.contract.enums import LeapDataType, MetricDirection, ConfusionM
 from code_loader.visualizers.default_visualizers import LeapImage
 from code_loader.inner_leap_binder.leapbinder_decorators import (tensorleap_preprocess, tensorleap_gt_encoder,
                                                                  tensorleap_input_encoder, tensorleap_metadata,
-                                                                 tensorleap_custom_visualizer,tensorleap_unlabeled_preprocess)
+                                                                 tensorleap_custom_visualizer)
 from code_loader.contract.responsedataclasses import BoundingBox
 from code_loader.contract.visualizer_classes import LeapImageWithBBox
 from code_loader.utils import rescale_min_max
@@ -137,7 +137,7 @@ def image_visualizer(image: np.ndarray) -> LeapImage:
 
 
 @tensorleap_custom_visualizer("bb_decoder", LeapDataType.ImageWithBBox)
-def preds_visualizer(image: np.ndarray, predictions: np.ndarray,data : SamplePreprocessResponse) -> LeapImageWithBBox:
+def pred_visualizer(image: np.ndarray, predictions,pred80,pred40,pred20: np.ndarray,data : SamplePreprocessResponse) -> LeapImageWithBBox:
     image=image.squeeze(0)
     y_pred = predictor.postprocess(torch.from_numpy(predictions.copy()))
     _, cls_temp, bbx_temp, conf_temp = output_to_target(y_pred, max_det=predictor.args.max_det)
@@ -195,7 +195,7 @@ def get_matrices(y_pred_0:np.ndarray,pred80: np.ndarray,pred40: np.ndarray,pred2
 
 
 @tensorleap_custom_metric("cost", direction=MetricDirection.Downward)
-def cost(pred80,pred40,pred20,gt):
+def cost(y_pred0,pred80,pred40,pred20,gt):
     gt=np.squeeze(gt,axis=0)
     d={}
     d["bboxes"] = torch.from_numpy(gt[...,:4])
@@ -207,7 +207,7 @@ def cost(pred80,pred40,pred20,gt):
 
 
 @tensorleap_custom_metric('Confusion Matrix')
-def get_matrices(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
+def get_matrices(y_pred,pred80,pred40,pred20: np.ndarray, preprocess: SamplePreprocessResponse):
     threshold=cfg.iou
     confusion_matrix_elements = []
     batch=preprocess.preprocess_response.data['dataloader'][int(preprocess.sample_ids)]
