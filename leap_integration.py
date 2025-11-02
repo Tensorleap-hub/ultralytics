@@ -9,8 +9,7 @@ from ultralytics.tensorleap_folder.utils import validate_supported_models
 from ultralytics.tensorleap_folder.global_params import cfg, all_clss
 from code_loader.plot_functions.visualize import visualize
 from code_loader.contract.datasetclasses import PredictionTypeHandler
-from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_load_model, tensorleap_integration_test, \
-    tensorleap_status_table
+from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_load_model, tensorleap_integration_test
 
 prediction_type1 = PredictionTypeHandler(name='object detection', labels=["x", "y", "w", "h"] + [cl for cl in all_clss.values()], channel_dim=1)
 prediction_type2 = PredictionTypeHandler(name='concatenate_20', labels=[str(i) for i in range(20)], channel_dim=-1)
@@ -53,11 +52,9 @@ def check_custom_test_mapping(idx, subset):
     visualize(img_vis)
     visualize(pred_img)
     visualize(gt_img)
-print(cost_dic)
 
 
 
 if __name__ == '__main__':
-    tensorleap_status_table()
     check_custom_test_mapping(0, preprocess_func_leap()[1])
     check_custom_test_mapping(0, preprocess_func_leap()[2])
