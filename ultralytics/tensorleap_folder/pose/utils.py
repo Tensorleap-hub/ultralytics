@@ -134,9 +134,17 @@ def validate_supported_models(pt_name,arch_name):
     if (pt_name not in supported_versions and Path(arch_name).stem not in supported_versions +['None_path']) or (pt_name in supported_versions and arch_name!=pt_name and arch_name !='None_path') :
         raise Exception(f"unsupported model. use one of {supported_versions} backbones")
 
-import os
-import shutil
-from pathlib import Path
+def get_dataset_split(phase, split_file):
+    data = np.load(split_file)
+
+    d = {
+        "val": data["val_idxs"],
+        "test": data["test_idxs"],
+        "train": data["train_labeled_idxs"],
+        "unlabeled": data["train_unlabeled_idxs"]
+    }
+    return [int(x) for x in d[phase]]
+
 
 def set_leap_yaml2root(cfg):
     assert cfg.task == "pose", "Running pose leap binder while default.yaml task is set to detect"

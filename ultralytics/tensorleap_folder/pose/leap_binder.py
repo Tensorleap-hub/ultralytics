@@ -1,4 +1,5 @@
 import copy
+import os
 
 import torch
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric
@@ -8,7 +9,7 @@ from ultralytics.engine.results import Boxes
 from ultralytics.tensorleap_folder.pose.global_params import cfg, yolo_data, criterion, all_clss, \
     possible_float_like_nan_types, wanted_cls_dic, predictor, ob_yolo_data, ob_cfg, ob_all_clss
 from ultralytics.tensorleap_folder.pose.utils import create_data_with_ult, pre_process_dataloader, \
-    update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, pre_process_ob_dataloader
+    update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, pre_process_ob_dataloader, get_dataset_split
 from typing import List, Dict, Union, Any
 import numpy as np
 from code_loader.contract.datasetclasses import PreprocessResponse, DataStateType, SamplePreprocessResponse, \
@@ -43,8 +44,9 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
         data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase)
         ob_data_loader, ob_n_samples = create_data_with_ult(ob_cfg, ob_yolo_data, phase=phase)
         responses.append(
-            PreprocessResponse(length=n_samples,
+            PreprocessResponse(sample_ids= list(range(n_samples)) if not cfg.use_data_split_file[0] else get_dataset_split(phase,os.path.join(cfg.tensorleap_path,cfg.use_data_split_file[1])),
                                data={'dataloader':data_loader, "ob_dataloader": ob_data_loader},
+                               sample_id_type=int,
                                state=dataset_type))
     return responses
 
