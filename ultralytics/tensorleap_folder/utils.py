@@ -144,3 +144,8 @@ def get_dataset_split(phase, split_file):
         "unlabeled": data["train_unlabeled_idxs"]
     }
     return [int(x) for x in d[phase]]
+
+def set_leap_yaml2root(cfg):
+    assert cfg.task == "detect", "Running detect leap binder while default.yaml task is set to pose"
+    root = Path(__file__).resolve().parents[2]
+    shutil.copy(Path(__file__).resolve().parent / 'detect'/'leap.yaml', root / 'leap.yaml')

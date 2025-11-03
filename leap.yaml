@@ -1,12 +1,11 @@
-codeIntegrationId: 68ad95bad2dbfaafb3b0cb41
-projectId: 68ad95b4d2dbfaafb3b0cb3b
+codeIntegrationId:
+projectId:
 secretId: ""
 branch: master
 entryFile: leap_integration.py
 include:
     - leap_binder.py
     - leap_integration.py
-    - global_params.py
     - requirements.txt
     - ultralytics/tensorleap_folder/utils.py
     - ultralytics/tensorleap_folder/global_params.py
