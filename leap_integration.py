@@ -5,7 +5,7 @@ from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
                          cost, metadata_per_img, ious, confusion_matrix_metric)
 import onnxruntime as ort
 import numpy as np
-from ultralytics.tensorleap_folder.utils import validate_supported_models
+from ultralytics.tensorleap_folder.utils import validate_supported_models, set_leap_yaml2root
 from ultralytics.tensorleap_folder.global_params import cfg, all_clss
 from code_loader.plot_functions.visualize import visualize
 from code_loader.contract.datasetclasses import PredictionTypeHandler
@@ -38,7 +38,6 @@ def check_custom_test_mapping(idx, subset):
     # get gt
     gt = gt_encoder(idx, subset)
     # custom metrics
-    # if not subset.state==DataStateType.unlabeled:
     total_loss=loss(y_pred[1],y_pred[2],y_pred[3],gt ,y_pred[0])
     cost_dic=cost(y_pred[1],y_pred[2],y_pred[3],gt)
     iou=ious(y_pred[0], s_prepro)
@@ -56,5 +55,5 @@ def check_custom_test_mapping(idx, subset):
 
 
 if __name__ == '__main__':
+    set_leap_yaml2root(cfg)
     check_custom_test_mapping(0, preprocess_func_leap()[1])
-    check_custom_test_mapping(0, preprocess_func_leap()[2])
