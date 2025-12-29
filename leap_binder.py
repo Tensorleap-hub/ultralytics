@@ -205,7 +205,7 @@ def cost(pred80,pred40,pred20,gt):
     return {"box":loss_parts[0].unsqueeze(0).numpy(),"cls":loss_parts[1].unsqueeze(0).numpy(),"dfl":loss_parts[2].unsqueeze(0).numpy()}
 
 
-@tensorleap_custom_metric('Confusion Matrix')
+@tensorleap_custom_metric('Confusion Matrix',direction=MetricDirection.Downward)
 def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
     threshold=cfg.iou
     confusion_matrix_elements = []
