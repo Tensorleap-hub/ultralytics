@@ -45,7 +45,7 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
 
 # ------------------------------------------input and gt----------------------------------------------------------------
 
-@tensorleap_input_encoder('image',channel_dim=1)
+@tensorleap_input_encoder('image', channel_dim=1)
 def input_encoder(idx: int, preprocess: PreprocessResponse) -> np.ndarray:
     imgs, _, _,_=pre_process_dataloader(preprocess, idx, predictor)
     return imgs.astype('float32')
@@ -75,7 +75,7 @@ def metadata_sample_index(idx: int, preprocess: PreprocessResponse) -> int:
     return idx
 
 
-@tensorleap_metadata("image info a", metadata_type = possible_float_like_nan_types)
+@tensorleap_metadata("image info a", metadata_type=possible_float_like_nan_types)
 def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str, int, float]]:
     nan_default_value = None
     gt_data = gt_encoder(idx, data)
@@ -205,7 +205,7 @@ def cost(pred80,pred40,pred20,gt):
     return {"box":loss_parts[0].unsqueeze(0).numpy(),"cls":loss_parts[1].unsqueeze(0).numpy(),"dfl":loss_parts[2].unsqueeze(0).numpy()}
 
 
-@tensorleap_custom_metric('Confusion Matrix')
+@tensorleap_custom_metric('Confusion Matrix', direction=MetricDirection.Downward)
 def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
     threshold=cfg.iou
     confusion_matrix_elements = []
