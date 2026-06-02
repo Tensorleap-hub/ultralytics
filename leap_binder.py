@@ -78,6 +78,16 @@ def _eval_cls_name(idx):
         return _MERGE_LABEL
     return all_clss.get(idx, "Unknown Class")
 
+
+def _finite_or_none(d):
+    """JSON / Elasticsearch cannot represent NaN or Infinity. The streaming-handler
+    bulk-indexes metadata documents and crash-loops if any value serializes as the
+    non-standard token 'NaN' (e.g. an overlap ratio divided by a zero-area gt box).
+    Replace any non-finite numeric value with None (indexed as null), matching how the
+    per-class counts already represent 'no value'."""
+    return {k: (None if isinstance(v, (float, np.floating)) and not np.isfinite(v) else v)
+            for k, v in d.items()}
+
 # ----------------------------------------------------data processing---------------------------------------------------
 
 @tensorleap_instances_masks_encoder('image')
@@ -196,7 +206,7 @@ def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str,
             (occlusion_matrix.sum(axis=1) / areas_in_pixels).max()) if no_nans_values else nan_default_value,
     }
     d.update(**count_dict)
-    return d
+    return _finite_or_none(d)
 
 
 @tensorleap_metadata("aggressor")
