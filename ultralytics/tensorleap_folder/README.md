@@ -17,7 +17,7 @@ First time users, follow [For First-Time Users: Configure Your Project](#for-fir
 
 ---
 
-## 🔰 Case 1: Base Case: YOLOv11s with COCO128
+## 🔰 Case 1: Base Case: YOLOv11s with 
 
 Use this for the simplest setup with the default YOLOv11s model and the COCO128 dataset.
 

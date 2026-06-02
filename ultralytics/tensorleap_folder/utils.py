@@ -17,6 +17,9 @@ def create_data_with_ult(cfg,yolo_data, phase='val'):
     return dataset, n_samples
 
 def pre_process_dataloader(preprocessresponse:PreprocessResponse, idx, predictor):
+    # element-instance preprocess uses str sample ids ('k') and per-instance ids
+    # ('k_i'); resolve either (or a plain int) to the underlying image index.
+    idx = int(str(idx).split('_')[0])
     batch= preprocessresponse.data['dataloader'][idx]
     batch = predictor.preprocess(batch)
     imgs, clss, bboxes, batch_idxs, ori_shape, resized_shape,ratio_pad = batch['img'], batch['cls'], batch['bboxes'], batch['batch_idx'],batch['ori_shape'],batch['resized_shape'],batch['ratio_pad']

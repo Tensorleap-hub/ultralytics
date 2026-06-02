@@ -2,7 +2,8 @@ import os
 from code_loader.contract.datasetclasses import SamplePreprocessResponse
 from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
                          loss, gt_bb_decoder, image_visualizer, bb_decoder,
-                         cost, metadata_per_img, ious, confusion_matrix_metric)
+                         cost, metadata_per_img, ious, confusion_matrix_metric,
+                         metadata_aggressor, instance_best_iou, instance_match_confidence)
 import onnxruntime as ort
 import numpy as np
 from ultralytics.tensorleap_folder.utils import validate_supported_models, set_leap_yaml2root
@@ -18,7 +19,7 @@ prediction_type4 = PredictionTypeHandler(name='concatenate_80', labels=[str(i) f
 
 @tensorleap_load_model([prediction_type1,prediction_type2,prediction_type3,prediction_type4])
 def load_model():
-    model_path="/Users/yamtawachi/tensorleap/ultralytics/yolo11s.onnx"
+    model_path="/Users/yamtawachi/tensorleap/datasets/models/subcoco_partA/yolo11n.onnx"
     m_path = model_path if model_path != None else 'None_path'
     print("started custom tests")
     validate_supported_models(os.path.basename(cfg.model), m_path)
@@ -31,7 +32,13 @@ def load_model():
 
 @tensorleap_integration_test()
 def check_custom_test_mapping(idx, subset):
-    s_prepro = SamplePreprocessResponse(np.array(idx), subset)
+    # The integration-test body must only call Tensorleap decorators (the decorator
+    # re-runs it in mapping mode with idx=None). Inside the test, the input/gt encoder
+    # decorators auto-add the batch dim, so encoder outputs are model/loss/visualizer
+    # ready with no manual reshaping. __main__ passes a str id (sample_id_type=str).
+    # 1-d sample_ids so per-instance metrics can index sample_ids[0]; the sample-level
+    # metrics resolve it robustly.
+    s_prepro = SamplePreprocessResponse(np.array([idx]), subset)
     image = input_encoder(idx, subset)
     model = load_model()
     y_pred = model.run(None, {'images': image})
@@ -42,6 +49,9 @@ def check_custom_test_mapping(idx, subset):
     cost_dic=cost(y_pred[1],y_pred[2],y_pred[3],gt)
     iou=ious(y_pred[0], s_prepro)
     conf_mat = confusion_matrix_metric(y_pred[0], s_prepro)
+    ibi = instance_best_iou(y_pred[0], s_prepro)
+    imc = instance_match_confidence(y_pred[0], s_prepro)
+    agg_meta = metadata_aggressor(idx, subset)
     # metadata
     meta_data=metadata_per_img(idx, subset)
     # vis
@@ -56,4 +66,4 @@ def check_custom_test_mapping(idx, subset):
 
 if __name__ == '__main__':
     set_leap_yaml2root(cfg)
-    check_custom_test_mapping(0, preprocess_func_leap()[1])
+    check_custom_test_mapping("0", preprocess_func_leap()[1])

@@ -6,6 +6,7 @@ entryFile: leap_integration.py
 include:
     - leap_binder.py
     - leap_integration.py
+    - aggressor_map.json
     - requirements.txt
     - ultralytics/tensorleap_folder/utils.py
     - ultralytics/tensorleap_folder/global_params.py

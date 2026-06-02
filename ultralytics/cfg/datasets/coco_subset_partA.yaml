@@ -1,0 +1,25 @@
+path: /Users/yamtawachi/tensorleap/datasets/coco_subset_partA
+train: train_100.txt
+val: val_all.txt
+nc: 20
+names:
+  0: cat
+  1: cake
+  2: spoon
+  3: airplane
+  4: snowboard
+  5: oven
+  6: microwave
+  7: dog
+  8: bus
+  9: zebra
+  10: person
+  11: chair
+  12: dining table
+  13: cup
+  14: bottle
+  15: bowl
+  16: car
+  17: truck
+  18: fork
+  19: knife
