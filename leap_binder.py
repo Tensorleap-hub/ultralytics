@@ -100,6 +100,11 @@ def instance_mask_encoder(idx: str, preprocess: PreprocessResponse, instance_idx
 
 @tensorleap_instances_length_encoder('image')
 def instances_length_encoder(idx: str, preprocess: PreprocessResponse) -> int:
+    # Defensive: this runs for every sample at parse time. If a sample id ever exceeds the
+    # built dataset length (e.g. a stale .cache yielding fewer labels than the txt count),
+    # report no instances instead of crashing the whole dataset parse with an IndexError.
+    if _base_idx(idx) >= len(preprocess.data['dataloader']):
+        return 0
     gt = gt_encoder(idx, preprocess)
     for label in gt:
         x, y, w, h, label_id = label
@@ -231,6 +236,21 @@ def gt_bb_decoder(image: np.ndarray, bb_gt: np.ndarray) -> LeapImageWithBBox:
 def image_visualizer(image: np.ndarray) -> LeapImage:
     image = rescale_min_max(image.squeeze(0))
     return LeapImage((image.transpose(1,2,0)), compress=False)
+
+
+@tensorleap_custom_visualizer('image_visualizer_original', LeapDataType.Image)
+def image_visualizer_original(image: np.ndarray, preprocess: SamplePreprocessResponse) -> LeapImage:
+    """Element-instance visualizer: show the ORIGINAL image for an instance element.
+    Resolves the instance id '<sample>_<inst>' back to its base sample via the
+    preprocess mapping, then re-encodes that image (mirrors the reference repo)."""
+    sid = str(np.asarray(preprocess.sample_ids).reshape(-1)[0])
+    mapping = getattr(preprocess.preprocess_response, 'instance_to_sample_ids_mappings', None)
+    base_id = mapping.get(sid, sid) if mapping else sid
+    img = input_encoder(base_id, preprocess.preprocess_response)
+    img = rescale_min_max(img)
+    if img.ndim == 4:                  # auto-batched when called inside the integration test
+        img = img[0]
+    return LeapImage(img.transpose(1, 2, 0), compress=False)
 
 
 @tensorleap_custom_visualizer("bb_decoder", LeapDataType.ImageWithBBox)
@@ -371,7 +391,7 @@ def _resolve_instance_sample_id(preprocess: SamplePreprocessResponse):
     translating an instance id ('k_i') via the preprocess mapping when present."""
     id_ = str(np.asarray(preprocess.sample_ids).reshape(-1)[0])  # coerce numpy.str_ -> str
     mapping = getattr(preprocess.preprocess_response, 'instance_to_sample_ids_mappings', None)
-    return mapping[id_] if mapping else id_
+    return mapping.get(id_, id_) if mapping else id_
 
 
 @tensorleap_custom_instances_metric("instance_best_iou", direction=MetricDirection.Upward)

@@ -3,7 +3,8 @@ from code_loader.contract.datasetclasses import SamplePreprocessResponse
 from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
                          loss, gt_bb_decoder, image_visualizer, bb_decoder,
                          cost, metadata_per_img, ious, confusion_matrix_metric,
-                         metadata_aggressor, instance_best_iou, instance_match_confidence)
+                         metadata_aggressor, instance_best_iou, instance_match_confidence,
+                         image_visualizer_original)
 import onnxruntime as ort
 import numpy as np
 from ultralytics.tensorleap_folder.utils import validate_supported_models, set_leap_yaml2root
@@ -24,7 +25,7 @@ def load_model():
     print("started custom tests")
     validate_supported_models(os.path.basename(cfg.model), m_path)
     if not os.path.exists(m_path):
-        from export_model_to_tf import onnx_exporter  # TODO - currently supports only onnx
+        from export_model_to_tf import onnx_exporter
         m_path = onnx_exporter()
     model = ort.InferenceSession(m_path)
     return model
@@ -32,12 +33,6 @@ def load_model():
 
 @tensorleap_integration_test()
 def check_custom_test_mapping(idx, subset):
-    # The integration-test body must only call Tensorleap decorators (the decorator
-    # re-runs it in mapping mode with idx=None). Inside the test, the input/gt encoder
-    # decorators auto-add the batch dim, so encoder outputs are model/loss/visualizer
-    # ready with no manual reshaping. __main__ passes a str id (sample_id_type=str).
-    # 1-d sample_ids so per-instance metrics can index sample_ids[0]; the sample-level
-    # metrics resolve it robustly.
     s_prepro = SamplePreprocessResponse(np.array([idx]), subset)
     image = input_encoder(idx, subset)
     model = load_model()
@@ -51,9 +46,10 @@ def check_custom_test_mapping(idx, subset):
     conf_mat = confusion_matrix_metric(y_pred[0], s_prepro)
     ibi = instance_best_iou(y_pred[0], s_prepro)
     imc = instance_match_confidence(y_pred[0], s_prepro)
-    agg_meta = metadata_aggressor(idx, subset)
     # metadata
     meta_data=metadata_per_img(idx, subset)
+    agg_meta = metadata_aggressor(idx, subset)
+
     # vis
     img_vis=image_visualizer(image)
     pred_img=bb_decoder(image,y_pred[0])
@@ -66,4 +62,7 @@ def check_custom_test_mapping(idx, subset):
 
 if __name__ == '__main__':
     set_leap_yaml2root(cfg)
-    check_custom_test_mapping("0", preprocess_func_leap()[1])
+    index=0
+    preprocess_resoinse = preprocess_func_leap()[index]
+    sample_id = preprocess_resoinse.sample_ids[index]
+    check_custom_test_mapping(sample_id, preprocess_func_leap()[index])

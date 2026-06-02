@@ -14,7 +14,12 @@ def create_data_with_ult(cfg,yolo_data, phase='val'):
     n_samples = sum(1 for _ in open(yolo_data[phase])) if yolo_data[phase].endswith(".txt") else len(
         os.listdir(yolo_data[phase]))
     dataset = build_yolo_dataset(cfg, yolo_data[phase],n_samples , yolo_data, mode='val', stride=32)
-    return dataset, n_samples
+    # The txt line count above is only a hint for build_yolo_dataset's batch arg. The
+    # element-instance preprocess dereferences EVERY sample id at parse time, so the sample
+    # count must match the dataset that was actually built (the scan can drop images or load
+    # from a stale .cache). Reporting the txt count instead of len(dataset) makes the sweep
+    # index past self.labels -> IndexError: list index out of range. Report the real length.
+    return dataset, len(dataset)
 
 def pre_process_dataloader(preprocessresponse:PreprocessResponse, idx, predictor):
     # element-instance preprocess uses str sample ids ('k') and per-instance ids
