@@ -4,7 +4,8 @@ from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
                          loss, gt_bb_decoder, image_visualizer, bb_decoder,
                          cost, metadata_per_img, ious, confusion_matrix_metric,
                          metadata_aggressor, instance_best_iou, instance_match_confidence,
-                         image_visualizer_original)
+                         image_visualizer_original, gt_pred_bb_visualizer,
+                         instance_zoom_visualizer, instance_full_image_visualizer)
 import onnxruntime as ort
 import numpy as np
 from ultralytics.tensorleap_folder.utils import validate_supported_models, set_leap_yaml2root
@@ -54,9 +55,18 @@ def check_custom_test_mapping(idx, subset):
     img_vis=image_visualizer(image)
     pred_img=bb_decoder(image,y_pred[0])
     gt_img = gt_bb_decoder(image, gt)
+    orig_img = image_visualizer_original(image, s_prepro)
+    # instance visualizers (ported from temp_instance_viz_code's tile pattern)
+    gt_pred_img = gt_pred_bb_visualizer(image, gt, y_pred[0])
+    inst_zoom = instance_zoom_visualizer(image, y_pred[0], s_prepro)
+    inst_full = instance_full_image_visualizer(image, y_pred[0], s_prepro)
     visualize(img_vis)
     visualize(pred_img)
     visualize(gt_img)
+    visualize(orig_img)
+    visualize(gt_pred_img)
+    visualize(inst_zoom)
+    visualize(inst_full)
 
 
 

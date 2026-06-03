@@ -1,6 +1,7 @@
 import os
 import json
 from pathlib import Path
+import cv2
 import torch
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric, \
     tensorleap_instances_length_encoder, tensorleap_custom_instances_metric
@@ -275,6 +276,111 @@ def bb_decoder(image: np.ndarray, predictions: np.ndarray) -> LeapImageWithBBox:
     bbox = [BoundingBox(x=bbx[0], y=bbx[1], width=bbx[2], height=bbx[3], confidence=bbx[4], label=all_clss.get(int(bbx[5]),'Unknown Class')) for bbx in post_proc_pred]
     image = rescale_min_max(image)
     return LeapImageWithBBox(data=(image.transpose(1,2,0)), bounding_boxes=bbox)
+
+
+# --------------------------------------------instance visualizers------------------------------------------------------
+# Ported from the tile-based reference (temp_instance_viz_code): an element-instance is to its
+# base image what a tile is to the full frame there. Three views per instance:
+#   1. gt_pred_bb_visualizer       - gt + predictions combined in one view  (ref: bbox_visualizer)
+#   2. instance_zoom_visualizer    - the instance region at full detail     (ref: bbox_visualizer_high_res)
+#   3. instance_full_image_visualizer - the original image with the instance
+#      region outlined + gt + preds                                          (ref: full_image_bbox_visualizer)
+
+def _instance_parts(preprocess: SamplePreprocessResponse):
+    """(base_id, instance_idx | None) for the sample an instance-aware visualizer runs on.
+    Instance ids are '<base>_<i>'; base samples resolve to (id, None)."""
+    sid = str(np.asarray(preprocess.sample_ids).reshape(-1)[0])
+    mapping = getattr(preprocess.preprocess_response, 'instance_to_sample_ids_mappings', None)
+    base_id = mapping.get(sid, sid) if mapping else sid
+    instance_idx = int(sid.rsplit('_', 1)[1]) if base_id != sid else None
+    return base_id, instance_idx
+
+
+def _decoded_pred_boxes(image_chw: np.ndarray, predictions: np.ndarray) -> np.ndarray:
+    """Predictions -> rows [x, y, w, h, conf, cls] normalized to the image (bb_decoder's decode)."""
+    y_pred = predictor.postprocess(torch.from_numpy(predictions.copy()))
+    _, cls_temp, bbx_temp, conf_temp = output_to_target(y_pred, max_det=predictor.args.max_det)
+    t_pred = np.concatenate([bbx_temp, np.expand_dims(conf_temp, 1), np.expand_dims(cls_temp, 1)], axis=1)
+    t_pred = t_pred[t_pred[:, 4] > (getattr(cfg, "conf", 0.25) or 0.25)]
+    t_pred[:, :4:2] /= image_chw.shape[1]
+    t_pred[:, 1:4:2] /= image_chw.shape[2]
+    return t_pred
+
+
+def _to_labeled_bboxes(rows: np.ndarray, label: str, conf: float = None) -> List[BoundingBox]:
+    """Reference's _to_bboxes: fixed 'gt'/'pred' labels so both fit a single diff view."""
+    return [BoundingBox(x=float(r[0]), y=float(r[1]), width=float(r[2]), height=float(r[3]),
+                        confidence=float(conf if conf is not None else r[4]), label=label)
+            for r in rows]
+
+
+def _base_image_and_gt(preprocess: SamplePreprocessResponse):
+    """Original (base) image CHW + valid gt rows for the current sample/instance."""
+    base_id, inst = _instance_parts(preprocess)
+    img = input_encoder(base_id, preprocess.preprocess_response)
+    img = img[0] if img.ndim == 4 else img
+    gt = gt_encoder(base_id, preprocess.preprocess_response)
+    gt = gt[0] if gt.ndim == 3 else gt
+    gt = gt[~np.isnan(gt).any(axis=1)]
+    return img, gt, inst
+
+
+@tensorleap_custom_visualizer("gt_pred_bb_visualizer", LeapDataType.ImageWithBBox)
+def gt_pred_bb_visualizer(image: np.ndarray, bb_gt: np.ndarray, predictions: np.ndarray) -> LeapImageWithBBox:
+    """GT and predictions combined in one view ('gt' vs 'pred')."""
+    image = image.squeeze(0) if image.ndim == 4 else image
+    gt = bb_gt.squeeze(0) if bb_gt.ndim == 3 else bb_gt
+    gt = gt[~np.isnan(gt).any(axis=1)]
+    bboxes = (_to_labeled_bboxes(gt[:, :4], 'gt', conf=1.0) +
+              _to_labeled_bboxes(_decoded_pred_boxes(image, predictions), 'pred'))
+    return LeapImageWithBBox(data=rescale_min_max(image).transpose(1, 2, 0), bounding_boxes=bboxes)
+
+
+@tensorleap_custom_visualizer("instance_zoom_visualizer", LeapDataType.ImageWithBBox)
+def instance_zoom_visualizer(image: np.ndarray, predictions: np.ndarray,
+                             preprocess: SamplePreprocessResponse) -> LeapImageWithBBox:
+    """The instance's region cropped from the ORIGINAL image (with margin), gt + pred boxes
+    remapped into the crop. Falls back to the full view for base samples."""
+    img, gt, inst = _base_image_and_gt(preprocess)
+    preds = _decoded_pred_boxes(img, predictions)
+    H, W = img.shape[1], img.shape[2]
+    if inst is None or inst >= len(gt):
+        x1, y1, x2, y2 = 0.0, 0.0, 1.0, 1.0
+    else:
+        x, y, w, h = gt[inst, :4]
+        mx, my = max(float(w) * 0.5, 0.05), max(float(h) * 0.5, 0.05)   # context margin
+        x1, y1 = max(float(x - w / 2) - mx, 0.0), max(float(y - h / 2) - my, 0.0)
+        x2, y2 = min(float(x + w / 2) + mx, 1.0), min(float(y + h / 2) + my, 1.0)
+    crop = img[:, int(y1 * H):int(np.ceil(y2 * H)), int(x1 * W):int(np.ceil(x2 * W))]
+    cw, ch = max(x2 - x1, 1e-6), max(y2 - y1, 1e-6)
+
+    def _remap(rows, label, conf=None):
+        return [BoundingBox(x=float((r[0] - x1) / cw), y=float((r[1] - y1) / ch),
+                            width=float(r[2] / cw), height=float(r[3] / ch),
+                            confidence=float(conf if conf is not None else r[4]), label=label)
+                for r in rows]
+
+    bboxes = _remap(gt[:, :4], 'gt', 1.0) + _remap(preds, 'pred')
+    return LeapImageWithBBox(data=rescale_min_max(crop).transpose(1, 2, 0), bounding_boxes=bboxes)
+
+
+@tensorleap_custom_visualizer("instance_full_image_visualizer", LeapDataType.ImageWithBBox)
+def instance_full_image_visualizer(image: np.ndarray, predictions: np.ndarray,
+                                   preprocess: SamplePreprocessResponse) -> LeapImageWithBBox:
+    """The ORIGINAL image with the current instance's region outlined (reference's
+    full_image_bbox_visualizer / _draw_tile_rect), plus 'gt' and 'pred' boxes."""
+    img, gt, inst = _base_image_and_gt(preprocess)
+    preds = _decoded_pred_boxes(img, predictions)
+    disp = np.ascontiguousarray(rescale_min_max(img).transpose(1, 2, 0))
+    if inst is not None and inst < len(gt):
+        H, W = disp.shape[0], disp.shape[1]
+        x, y, w, h = gt[inst, :4]
+        cv2.rectangle(disp,
+                      (int((x - w / 2) * W), int((y - h / 2) * H)),
+                      (int((x + w / 2) * W), int((y + h / 2) * H)),
+                      (255, 255, 0), 2)
+    bboxes = _to_labeled_bboxes(gt[:, :4], 'gt', conf=1.0) + _to_labeled_bboxes(preds, 'pred')
+    return LeapImageWithBBox(data=disp, bounding_boxes=bboxes)
 
 
 #Greedy one2one iou
