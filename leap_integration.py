@@ -60,19 +60,25 @@ def check_custom_test_mapping(idx, subset):
     gt_pred_img = gt_pred_bb_visualizer(image, gt, y_pred[0])
     inst_zoom = instance_zoom_visualizer(image, y_pred[0], s_prepro)
     inst_full = instance_full_image_visualizer(image, y_pred[0], s_prepro)
-    visualize(img_vis)
-    visualize(pred_img)
-    visualize(gt_img)
-    visualize(orig_img)
-    visualize(gt_pred_img)
-    visualize(inst_zoom)
-    visualize(inst_full)
+    visualize(img_vis, f"Input Image [{idx}]")
+    visualize(pred_img, f"Predictions [{idx}]")
+    visualize(gt_img, f"GT [{idx}]")
+    visualize(orig_img, f"Original Image [{idx}]")
+    visualize(gt_pred_img, f"GT vs Pred [{idx}]")
+    visualize(inst_zoom, f"Instance Zoom [{idx}]")        # crops only for instance ids ('k_i')
+    visualize(inst_full, f"Instance in Context [{idx}]")  # rect drawn only for instance ids
 
 
 
 if __name__ == '__main__':
     set_leap_yaml2root(cfg)
-    index=0
-    preprocess_resoinse = preprocess_func_leap()[index]
-    sample_id = preprocess_resoinse.sample_ids[index]
-    check_custom_test_mapping(sample_id, preprocess_func_leap()[index])
+    index = 0
+    response = preprocess_func_leap()[index]
+    # base sample: instance visualizers fall back to the full view (no crop / no rect)
+    base_id = next(s for s in response.sample_ids if '_' not in s)
+    check_custom_test_mapping(base_id, response)
+    # instance element ('k_i'): Instance Zoom crops the region, Instance in Context draws the rect
+    instance_id = next((s for s in response.sample_ids if '_' in s), None)
+    if instance_id is not None:
+        print(f"--- second pass on instance element {instance_id} ---")
+        check_custom_test_mapping(instance_id, response)
