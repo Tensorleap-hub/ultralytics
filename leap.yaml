@@ -1,5 +1,4 @@
-codeIntegrationId:
-projectId:
+projectId: 6a202b35c974c0ee8236153c
 secretId: ""
 branch: master
 entryFile: leap_integration.py
