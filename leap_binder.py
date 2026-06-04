@@ -48,12 +48,11 @@ def _base_idx(idx):
 
 
 # --- evaluation class merge ------------------------------------------------------------
-# The model is 20-class (oven=5, microwave=6 SEPARATE), but oven<->microwave is the same
-# concept ("oven_like") and their confusion must NOT count as a class error in metrics.
-# Canonicalize microwave(6) -> oven(5) wherever class identity is compared (loss, cost,
-# per-instance same-class matching) and display the merged class as "oven_like".
-# Set EVAL_CLASS_MERGE = {} to disable and score the raw 20 classes.
-EVAL_CLASS_MERGE = {6: 5}            # {microwave: oven}
+# V4 model (scratch-4): oven+microwave are ALREADY merged into ONE trained class
+# 'oven_like' at idx 5 (in both the model head and the dataset labels), so NO
+# eval-time canonicalization is needed -- the merge map stays EMPTY. (The Part-A
+# model had oven=5 / microwave=6 separate and merged here; that era is over.)
+EVAL_CLASS_MERGE = {}                # natively merged in V4; keep machinery for reuse
 _MERGE_LABEL = "oven_like"
 
 

@@ -29,10 +29,20 @@ def find(sub):
             return i
     return None
 
+import json as _json, os as _os
+_amap = _json.load(open(_os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "aggressor_map.json")))
+_non_stems = {k for k, v in _amap.items() if v.get("role") == "non_aggressor"}
+def find_role(role_stems):
+    from pathlib import Path as _P
+    for i, s in enumerate(stems):
+        if _P(s).stem in role_stems:
+            return i
+    return None
+
 targets = {
-    "synzebra": find("synzebra_"),
+    "synpizza": find("synpizza_"),
     "synbus": find("synbus_"),
-    "non_aggr_example": 0,
+    "non_aggr_example": find_role(_non_stems),
 }
 print("target indices:", targets)
 
@@ -44,15 +54,15 @@ def check(cond, msg):
     if not cond:
         fails.append(msg)
 
-# ---- find a val image that actually contains a microwave (cls 6) ----
+# ---- find a val image with an oven_like GT (cls 5 in V4; natively merged) ----
 mw_idx = None
 for i in range(min(n, 4000)):
     g = gt_encoder(str(i), pr)
-    if not np.isnan(g[:, 4]).all() and (g[:, 4].astype(int) == 6).any():
+    if not np.isnan(g[:, 4]).all() and (g[:, 4].astype(int) == 5).any():
         mw_idx = i
         break
-targets["microwave_gt"] = mw_idx
-print("microwave-containing val idx:", mw_idx)
+targets["oven_like_gt"] = mw_idx
+print("oven_like-containing val idx:", mw_idx)
 
 for name, idx in targets.items():
     if idx is None:
@@ -91,13 +101,13 @@ for name, idx in targets.items():
     _ = metadata_per_img(sidx, pr)
 
 # targeted metadata assertions
-if targets["synzebra"] is not None:
-    m = metadata_aggressor(str(targets["synzebra"]), pr)
-    check(m["aggressor_family"] == "synthetic_zebra" and m["aggressor_axis"] == "noise",
-          f"[synzebra] family/axis = {m['aggressor_family']}/{m['aggressor_axis']}")
+if targets["synpizza"] is not None:
+    m = metadata_aggressor(str(targets["synpizza"]), pr)
+    check(m["aggressor_family"] == "synthetic_pizza" and m["aggressor_axis"] == "low_resolution",
+          f"[synpizza] family/axis = {m['aggressor_family']}/{m['aggressor_axis']}")
 if targets["synbus"] is not None:
     m = metadata_aggressor(str(targets["synbus"]), pr)
-    check(m["aggressor_family"] == "synthetic_bus" and m["aggressor_axis"] == "contrast",
+    check(m["aggressor_family"] == "synthetic_bus" and m["aggressor_axis"] == "noise",
           f"[synbus] family/axis = {m['aggressor_family']}/{m['aggressor_axis']}")
 
 print("\n==== SMOKE RESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILURE(S): {fails}", "====")

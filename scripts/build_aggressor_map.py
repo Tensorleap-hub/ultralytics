@@ -38,11 +38,11 @@ FAMILY_AXIS = {
     "dogs_indoor_vs_outdoor": "context",
     "snowboards": "lowshot",
     "dominant_ovens_vs_microwaves": "confusion",
-    "synthetic_bus": "contrast",
-    "synthetic_zebra": "noise",
+    "synthetic_bus": "noise",
+    "synthetic_pizza": "low_resolution",
 }
 
-DEFAULT_ROOT = "/Users/yamtawachi/tensorleap/datasets/coco_subset_partA"
+DEFAULT_ROOT = "/Users/yamtawachi/tensorleap/datasets/coco_subset_v4"
 DEFAULT_RESOLVED = (
     "/Users/yamtawachi/tensorleap/aggressor-benchmarking/od_analysis/outputs/"
     "coco_aggressor_subdataset/resolved"
