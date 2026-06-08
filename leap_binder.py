@@ -158,6 +158,9 @@ def instance_mask_encoder(idx: str, preprocess: PreprocessResponse, instance_idx
     agg_role = _instance_aggressor_role(stem, int(label_id))
     instance_metadata = {
         "instance_aggressor_role": agg_role,                 # aggressor|context|non_aggressor|false_aggressor
+        # 2-way collapse: everything that is not the aggressor object (context,
+        # non_aggressor and false_aggressor controls) folds into not_an_aggressor.
+        "instance_aggressor_binary": "aggressor" if agg_role == "aggressor" else "not_an_aggressor",
         "instance_class": cls_name,
         "instance_is_aggressor": bool(agg_role == "aggressor"),
     }
