@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -10,10 +11,38 @@ from ultralytics.data import  build_yolo_dataset
 from ultralytics.utils.plotting import output_to_target
 
 
-def create_data_with_ult(cfg,yolo_data, phase='val'):
-    n_samples = sum(1 for _ in open(yolo_data[phase])) if yolo_data[phase].endswith(".txt") else len(
-        os.listdir(yolo_data[phase]))
-    dataset = build_yolo_dataset(cfg, yolo_data[phase],n_samples , yolo_data, mode='val', stride=32)
+def _filtered_img_list(img_path, exclude_stems):
+    """Return a path to an image-list txt with images whose stem is in `exclude_stems`
+    removed. Only txt-list inputs are filtered (dir inputs are returned unchanged).
+    Relative './...' lines are made absolute (so the temp file can live anywhere --
+    build_yolo_dataset resolves './' relative to the LIST's parent dir), but withOUT
+    following symlinks: the dataset images are symlinks into external roots, and YOLO
+    derives each label path by replacing '/images/' -> '/labels/' in the IMAGE path.
+    Resolving the symlink (Path.resolve) points the path at the target's home dir,
+    where no '/labels/' sibling exists -> every image loads as a background (0 GT).
+    os.path.abspath normalizes to an absolute path while keeping the symlink in place."""
+    if not exclude_stems or not str(img_path).endswith(".txt"):
+        return img_path
+    parent = Path(img_path).parent
+    kept = []
+    with open(img_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            if Path(line).stem in exclude_stems:
+                continue
+            kept.append(os.path.abspath(parent / line[2:]) if line.startswith("./") else line)
+    out = Path(tempfile.gettempdir()) / f"{Path(img_path).stem}.filtered_{len(kept)}.txt"
+    out.write_text("\n".join(kept) + "\n")
+    return str(out)
+
+
+def create_data_with_ult(cfg,yolo_data, phase='val', exclude_stems=None):
+    img_path = _filtered_img_list(yolo_data[phase], exclude_stems)
+    n_samples = sum(1 for _ in open(img_path)) if str(img_path).endswith(".txt") else len(
+        os.listdir(img_path))
+    dataset = build_yolo_dataset(cfg, img_path,n_samples , yolo_data, mode='val', stride=32)
     # The txt line count above is only a hint for build_yolo_dataset's batch arg. The
     # element-instance preprocess dereferences EVERY sample id at parse time, so the sample
     # count must match the dataset that was actually built (the scan can drop images or load

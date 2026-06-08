@@ -1,0 +1,81 @@
+# Download the coco_subset data from S3 and point this repo at it
+
+Fetch a packaged `coco_subset` dataset from S3, extract it where the repo expects,
+and switch the integration to it. **v4m** is the active version; **v4** is identical
+except for the non-aggressor *validation* images (train is the same). Swap the
+version tag and everything else is the same.
+
+> What the dataset/model/metrics actually are: see `DATASET_AND_MODEL.md`.
+
+## 1. Versions on S3
+
+Private bucket `aggrresors-benchmarking` (~4.1 GB each, contains `data.yaml`,
+`images/{train,val}/`, `labels/{train,val}/`, the `*.txt` split lists, and
+`split_counts.json`):
+
+| version | S3 key (under `s3://aggrresors-benchmarking/public-datasets/`) | local data root |
+|---|---|---|
+| **v4m** (active) | `coco_subset_v4m/coco_subcoco_dataset.tar.gz` | `<data_path>/coco_subset_v4m` |
+| v4 | `coco_subset_v4/coco_subcoco_dataset.tar.gz` | `<data_path>/coco_subset_v4` |
+
+`<data_path>` = your local datasets directory (= `tensorleap_path` in
+`ultralytics/cfg/default.yaml`, e.g. `/Users/<you>/tensorleap/datasets`).
+
+## 2. Download + extract (where it goes)
+
+```bash
+export AWS_PROFILE=dev          # private bucket; run `aws sso login` if the session expired
+VER=v4m                         # or: v4
+
+DST=<data_path>/coco_subset_$VER
+mkdir -p "$DST"
+aws s3 cp "s3://aggrresors-benchmarking/public-datasets/coco_subset_$VER/coco_subcoco_dataset.tar.gz" "$DST/"
+tar -xzf "$DST/coco_subcoco_dataset.tar.gz" -C "$DST" && rm "$DST/coco_subcoco_dataset.tar.gz"
+
+cat "$DST/split_counts.json"    # verify: val_all 11409, non_val_aggressors 6769, val_clean 7112
+```
+
+The data root must match the `path:` in the repo's dataset yaml (§3). Ignore the
+`path:` inside the extracted `data.yaml` — the repo doesn't use it.
+
+## 3. Point the repo at it (the only configs that matter)
+
+1. **`ultralytics/cfg/default.yaml`** → `data: coco_subset_<VER>.yaml`
+   (currently `coco_subset_v4m.yaml`). Model stays `model: models/subcoco_v4/yolo11n.pt`.
+2. **`ultralytics/cfg/datasets/coco_subset_<VER>.yaml`** — already in the repo
+   (`val: val_all.txt`, `nc: 20`). Set its `path:` to `<data_path>/coco_subset_<VER>`
+   if your `<data_path>` differs from the value committed there.
+3. **Regenerate `aggressor_map.json`** for the chosen root (v4m's non-aggressor stems
+   differ from v4's — the default `--root` is **v4**, so pass it explicitly for v4m):
+   ```bash
+   python scripts/build_aggressor_map.py --root <data_path>/coco_subset_v4m
+   # for v4:  python scripts/build_aggressor_map.py     (default root = coco_subset_v4)
+   ```
+
+Optional knob — **`tensorleap_use_false_aggressors`** in `default.yaml` (currently
+`False`): keep/drop the 343 false-aggressor images in the val set (val 11,409 ↔ 11,066).
+
+
+
+Then run the integration from the repo root with this repo's `.venv`
+(e.g. `python leap_integration.py`).
+
+## 4. Push to the platform
+
+Push the ONNX model + this integration code and kick off an Evaluate run
+(`leapdev` `24.rc-0`):
+
+```bash
+leapdev push -m <data_path>/models/subcoco_v4/yolo11n.onnx --eval
+```
+
+## 5. View instances & aggressors in the analysis
+
+Before starting the analysis, set these up to see the instance views and aggressors:
+
+1. Toggle **Element Instance** on.
+2. Filter `metadata.builtin_instance_metadata_is_instance == 1`.
+3. Filter `dataset_state.keyword = valid`.
+4. To see the aggressor family/role, **color by** `metadata.aggressor_aggressor_role`
+   (role) or `metadata.aggressor_aggressor_family` (family).
+5. Regenerate insights based on these filters.

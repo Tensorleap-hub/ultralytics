@@ -37,6 +37,11 @@ try:
 except FileNotFoundError:
     AGGRESSOR_MAP = {}
 
+# Image stems of the false-aggressor (within-family clean control) val images. Used to
+# optionally drop them from the val set via the `tensorleap_use_false_aggressors` flag.
+_FALSE_AGGRESSOR_STEMS = {stem for stem, info in AGGRESSOR_MAP.items()
+                         if info.get("role") == "false_aggressor"}
+
 
 def _base_idx(idx):
     """Resolve a sample id to its int dataloader index.
@@ -134,8 +139,11 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
     if cfg.tensorleap_use_unlabeled:
         phases.append('unlabeled')
         dataset_types.append(DataStateType.unlabeled)
+    drop_false = not getattr(cfg, "tensorleap_use_false_aggressors", True)
     for phase, dataset_type in zip(phases, dataset_types):
-        data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase)
+        exclude_stems = _FALSE_AGGRESSOR_STEMS if (drop_false and phase == 'val') else None
+        data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase,
+                                                      exclude_stems=exclude_stems)
         sample_ids = [str(idd) for idd in range(n_samples)]
         responses.append(
             PreprocessResponse(sample_ids=sample_ids,
@@ -404,6 +412,9 @@ def ious(y_pred: np.ndarray,preprocess: SamplePreprocessResponse):
         return iou_dic
     iou_mat = box_iou(boxes_gt, predn[:, :4]).numpy()
     n_gt, n_pred = iou_mat.shape
+    if n_gt == 0:                       # background image (no GT): every prediction is a false positive, IoU 0
+        iou_dic["mean sample iou"] = np.zeros(1) if n_pred else default_value
+        return iou_dic
     used_gt = np.zeros(n_gt, dtype=bool)
     assigned_iou_per_gt = np.zeros(n_gt)
     iou_per_pred = np.zeros(n_pred)
@@ -455,7 +466,7 @@ def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResp
     pbatch = predictor._prepare_batch(0, batch)
     cls, bbox = pbatch.pop("cls"), pbatch.pop("bbox")
     predn = predictor._prepare_pred(pred, pbatch)
-    if len(predn)!=0:
+    if len(predn)!=0 and bbox.shape[0]!=0:   # need BOTH preds and GT to match; empty GT -> else (background)
         ious = box_iou(bbox, predn[:, :4]).numpy().T
         prediction_detected = np.any((ious > threshold), axis=1)
         max_iou_ind = np.argmax(ious, axis=1)
@@ -509,12 +520,13 @@ def _resolve_instance_sample_id(preprocess: SamplePreprocessResponse):
     return mapping.get(id_, id_) if mapping else id_
 
 
-@tensorleap_custom_instances_metric("instance_best_iou", direction=MetricDirection.Upward)
+@tensorleap_custom_instances_metric("instance_best_iou", direction=MetricDirection.Downward)
 def instance_best_iou(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
-    """Per-GT-instance IoU of the best-matching same-class prediction (0 if unmatched)."""
+    """Per-GT-instance localization error 1 - IoU of the best-matching same-class
+    prediction (1 if unmatched; lower is better)."""
     sample_id = _resolve_instance_sample_id(preprocess)
     n_instances = instances_length_encoder(sample_id, preprocess.preprocess_response)
-    result = {i: np.zeros(1, dtype=np.float32) for i in range(n_instances)}
+    result = {i: np.ones(1, dtype=np.float32) for i in range(n_instances)}
     if n_instances == 0:
         return result
 
@@ -540,7 +552,7 @@ def instance_best_iou(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
 
     best_iou_per_gt = iou_mat.max(dim=1).values.numpy()
     for i in range(min(n_instances, best_iou_per_gt.shape[0])):
-        result[i] = np.array([best_iou_per_gt[i]], dtype=np.float32)
+        result[i] = np.array([1.0 - best_iou_per_gt[i]], dtype=np.float32)
     return result
 
 
