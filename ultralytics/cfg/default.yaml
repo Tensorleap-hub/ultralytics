@@ -11,7 +11,7 @@ tensorleap_use_unlabeled: False
 tensorleap_use_false_aggressors: False  # include false-aggressor (within-family clean control) images in the val set; set False to drop them --TENSORLEAP FLAG
 # Train settings -------------------------------------------------------------------------------------------------------
 model: models/subcoco_v4/yolo11n.pt  # V4 (scratch-4): T=600 equal mains, pizza@8, oven_like natively merged
-data: coco_subset_v4m.yaml # (str, optional) path to data file, i.e. coco8.yaml
+data: coco_subset_v4m2.yaml # (str, optional) path to data file, i.e. coco8.yaml
 use_data_split_file:
   - False
   - dataset_split_bad_init_pool.npz

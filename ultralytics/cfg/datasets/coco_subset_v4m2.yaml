@@ -1,4 +1,4 @@
-path: /Users/yamtawachi/tensorleap/datasets/coco_subset_v4m
+path: /Users/yamtawachi/tensorleap/datasets/coco_subset_v4m2
 train: train_100.txt
 val: val_all.txt
 nc: 20
