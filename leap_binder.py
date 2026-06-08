@@ -42,6 +42,50 @@ except FileNotFoundError:
 _FALSE_AGGRESSOR_STEMS = {stem for stem, info in AGGRESSOR_MAP.items()
                          if info.get("role") == "false_aggressor"}
 
+# Each aggressor family is defined around one target class -- the object the aggressor
+# transformation acts on. This maps the family name in AGGRESSOR_MAP to that class name.
+FAMILY_TO_CLASS = {
+    "cats": "cat",
+    "cakes": "cake",
+    "spoons": "spoon",
+    "airplanes_sky_vs_road": "airplane",
+    "dogs_indoor_vs_outdoor": "dog",
+    "snowboards": "snowboard",
+    "dominant_ovens_vs_microwaves": "oven_like",
+    "synthetic_bus": "bus",
+    "synthetic_pizza": "pizza",
+}
+# Resolve family -> trained class id against the dataset's class names (all_clss is id->name).
+_CLASS_NAME_TO_ID = {name: idx for idx, name in all_clss.items()}
+FAMILY_TO_CLASS_ID = {fam: _CLASS_NAME_TO_ID[cls] for fam, cls in FAMILY_TO_CLASS.items()
+                      if cls in _CLASS_NAME_TO_ID}
+
+
+def _instance_aggressor_role(stem: str, instance_cls_id: int) -> str:
+    """Per-instance aggressor role, distinguishing three (in val) / four (with train
+    controls) groups:
+      - 'aggressor'      : an instance of the family's target class inside an AGGRESSOR
+                           image (the object the aggressor definition acts on).
+      - 'context'        : an instance of any OTHER class inside an aggressor (or
+                           false-aggressor) image -- co-occurring scene context.
+      - 'non_aggressor'  : any instance in a clean (non-aggressor) image.
+      - 'false_aggressor': the target-class instance inside a false-aggressor image
+                           (within-family clean control; dropped from val via the
+                           tensorleap_use_false_aggressors flag, present in train)."""
+    info = AGGRESSOR_MAP.get(stem)
+    if not info:
+        return "non_aggressor"                      # unmapped image -> treat as clean
+    role = info.get("role")
+    if role == "non_aggressor":
+        return "non_aggressor"
+    target = FAMILY_TO_CLASS_ID.get(info.get("family"))
+    is_target = target is not None and int(instance_cls_id) == target
+    if role == "aggressor":
+        return "aggressor" if is_target else "context"
+    if role == "false_aggressor":
+        return "false_aggressor" if is_target else "context"
+    return "non_aggressor"                           # 'clean'/unknown fallback
+
 
 def _base_idx(idx):
     """Resolve a sample id to its int dataloader index.
@@ -108,7 +152,16 @@ def instance_mask_encoder(idx: str, preprocess: PreprocessResponse, instance_idx
 
     mask[:, y:y+h, x:x+w] = 1
 
-    element_instance = ElementInstance(all_clss.get(int(label_id), "Unknown Class"), mask)
+    cls_name = all_clss.get(int(label_id), "Unknown Class")
+    # Resolve the image stem to classify this instance against the aggressor definition.
+    stem = Path(preprocess.data['dataloader'].im_files[_base_idx(idx)]).stem
+    agg_role = _instance_aggressor_role(stem, int(label_id))
+    instance_metadata = {
+        "instance_aggressor_role": agg_role,                 # aggressor|context|non_aggressor|false_aggressor
+        "instance_class": cls_name,
+        "instance_is_aggressor": bool(agg_role == "aggressor"),
+    }
+    element_instance = ElementInstance(cls_name, mask, instance_metadata=instance_metadata)
 
     return element_instance
 
