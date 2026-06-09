@@ -1,21 +1,4 @@
-# Dataset & Model — coco_subset_v4 + scratch-4 (aggressor benchmark)
 
-What the Tensorleap integration in this repo runs on: the **V4 sub-COCO aggressor
-benchmark** dataset and the **from-scratch YOLO11n** detector trained on it. This
-file consolidates the dataset design, the aggressor taxonomy, the model, and the
-metrics — pulled from the code in this repo and from the saved analysis in the
-`aggressor-benchmarking` repo (branch `dataset-v4-600mains`).
-
-> **Sources of truth** (don't paraphrase — read these if a number here looks off):
-> - This repo: `ultralytics/cfg/datasets/coco_subset_v4.yaml`, `leap_binder.py`,
->   `scripts/build_aggressor_map.py`, `aggressor_map.json`, `leap_integration.py`.
-> - `aggressor-benchmarking` (branch `dataset-v4-600mains`):
->   `od_analysis/coco_aggressor_subdataset/DATASET_V4.md` (dataset),
->   `…/TRAINING_YOLO11N.md` (training protocol),
->   `…/results/instance_analysis_v4/{eval_instance_summary,worst30_aggressor_analysis}.md`
->   (the scratch-4 metrics quoted below).
-
----
 
 ## TL;DR
 
@@ -209,13 +192,6 @@ Rebuild: `python scripts/build_aggressor_map.py`.
   (non-aggressor + false), so early-stopping is never done on the shifted
   distribution. The aggressor split is held out for the post-train eval.
 
-> **Version drift to know:** `DATASET_V4.md` lists `scratch-7` (300 ep) as the
-> *next* retrain target. The model currently wired into the Tensorleap integration
-> is **scratch-4** (the metrics in §4 are scratch-4 on the V4 val set). The older
-> `results/eval/eval_summary.{md,json}` and `results/eval/split_counts.json` in the
-> benchmarking repo are **stale** (scratch-2, with `zebra`/separate `microwave` and
-> a 14,300-img val) — ignore them for V4; use `results/instance_analysis_v4/`.
-
 ---
 
 ## 4. Metrics
@@ -292,7 +268,101 @@ cats 41.3% · oven_like 28.7% · pizza 22.0% · airplane 17.3%.
 
 ---
 
-## 5. Where it lives (Tensorleap integration)
+## 5. Non-aggressor variants — v4 · v4m · v4m2
+
+Full metric comparison of the three non-aggressor *validation* pools (from `FINAL.md`).
+All three use the **same model (`scratch-4`)** and the **same aggressor + false-aggressor
+val pools** — only the non-aggressor val images differ:
+
+- **v4** — largest-first, single-object (1 box/img), 6,769 imgs
+- **v4m** — false-matched on size + brightness, single-object (1 box/img), 6,769 imgs
+- **v4m2** — true-aggressor scene-matched, multi-object (2 box/img), 3,384 imgs → val_all
+  8,024 imgs / 20,768 boxes
+
+Sources: `results/instance_analysis_{v4,v4m,v4m2}/eval_instance_summary.json`,
+`v4m_balance_scorecard.json`, `v4m2_balance_scorecard.json` (conf 0.001 for inst_map).
+
+### 5a. Distribution stats (per-image)
+
+| pool | imgs | inst/img | mean box area | dom area | brightness L* | perf (inst_map) |
+|---|--:|--:|--:|--:|--:|--:|
+| **true aggressors** | 4,297 | **3.18** (median 2) | 0.310 | 0.455 | 47.2 | 0.271 |
+| false aggressors | 343 | 1.00 | 0.374 | 0.374 | 49.5 | 0.742 |
+| non-aggr **v4** | 6,769 | 1.00 | 0.594 | 0.594 | 46.5 | 0.761 |
+| non-aggr **v4m** | 6,769 | 1.00 | 0.429 | 0.429 | 48.5 | 0.735 |
+| non-aggr **v4m2** | 3,384 | **2.00** | 0.220 | 0.308 | 47.6 | 0.751 |
+
+### 5b. Confound-probe AUC (aggressor-vs-non-aggressor; →0.5 = shift removed)
+
+5-fold logistic, uniform per-image features:
+
+| feature set | v4 | v4m | v4m2 |
+|---|--:|--:|--:|
+| [mean area, brightness] | 0.801 | **0.643** | **0.575** |
+| [inst/img, mean area, brightness] | 0.852 | 0.868 | **0.738** |
+
+v4m fixed size + brightness (0.801→0.643) but left scene complexity untouched (still
+1 box/img), so the *full* confound did not improve (0.852→0.868). Only **v4m2** — by
+matching instances/image — moved the full confound (0.852→**0.738**) and improved
+size/brightness further (→0.575).
+
+### 5c. Pool summary — mean mAP50-95
+
+| pool | v4 | v4m | v4m2 |
+|---|--:|--:|--:|
+| true aggressors | 0.2712 | 0.2712 | 0.2712 |
+| **non-aggr baseline** | 0.7597 | 0.7350 | 0.7502 |
+| false aggressors | 0.7420 | 0.7420 | 0.7420 |
+
+True-aggr and false-aggr are byte-identical across versions (those pools are unchanged);
+only the non-aggr baseline moves — v4m and v4m2 both land it ≈ the false controls (~0.74).
+
+### 5d. Per-family TRUE-aggressor drop%
+
+mAP per family is identical across versions (aggressors unchanged); `drop% vs baseline`
+shifts slightly with each baseline; `drop% vs false` is identical (same aggr + false):
+
+| family (axis) | mAP | drop% base v4 | drop% base v4m | drop% base v4m2 | drop% vs false |
+|---|--:|--:|--:|--:|--:|
+| spoons (aspect) | 0.002 | 99.7 | 99.7 | 99.7 | 99.1 |
+| cakes (size) | 0.017 | 97.8 | 97.7 | 97.8 | 97.2 |
+| snowboards (lowshot) | 0.056 | 92.7 | 92.4 | 92.6 | — |
+| synthetic_bus (noise) | 0.201 | 73.5 | 72.7 | 73.2 | 78.2 |
+| dogs (context) | 0.335 | 55.9 | 54.4 | 55.3 | 56.3 |
+| oven_like (confusion) | 0.346 | 54.4 | 52.9 | 53.9 | 43.7 |
+| cats (lightness) | 0.357 | 53.0 | 51.5 | 52.5 | 41.3 |
+| airplanes (context) | 0.498 | 34.5 | 32.3 | 33.6 | 39.6 |
+| synthetic_pizza (low-res) | 0.630 | 17.1 | 14.3 | 16.1 | 24.1 |
+
+### 5e. Worst-30% slice (aggressor enrichment in the hardest 30% by IoU)
+
+| metric | v4 | v4m | v4m2 |
+|---|--:|--:|--:|
+| % of slice that are aggr-main | 45.6% | 45.1% | 45.9% |
+| recall of aggr-main | 52.7% | 52.1% | 52.9% |
+| recall of non-aggr | 3.3% | 4.5% | **2.7%** |
+| **aggr / non-aggr ratio** | 15.97× | 11.58× | **19.59×** |
+| IoU cutoff @30% | 0.103 | 0.091 | 0.110 |
+
+### Takeaways
+
+- **The aggressor signal is version-independent**: true-aggr mAP (0.271), every per-family
+  `drop% vs false`, and false mAP (0.742) are identical across v4/v4m/v4m2. The benchmark
+  headline does not depend on non-aggressor composition.
+- **Composition is what each version fixes.** v4m and v4m2 both pull the baseline to ≈ false
+  (~0.74) and remove the size/brightness shift; **v4m2 additionally removes the
+  scene-complexity shift** (inst/img 1→2), the only thing that moved the full-feature
+  confound (0.852→0.738).
+- **v4m2 is the strongest "shift-prevented" baseline** while keeping non-aggr performance
+  (0.751) far above aggressors (0.271); worst-30% ratio 19.6× reflects that clean,
+  scene-matched contrast.
+- **Residual on v4m2** (AUC 0.738, not ~0.5) is mostly the deliberate **2/image vs aggr's
+  3.18-mean** choice (non-aggr is a spike at 2; aggressors are a spread 1→25) plus a small
+  size undershoot (mean box area 0.220 vs aggr 0.310).
+
+---
+
+## 6. Where it lives (Tensorleap integration)
 
 | file | role |
 |---|---|
@@ -305,6 +375,3 @@ cats 41.3% · oven_like 28.7% · pizza 22.0% · airplane 17.3%.
 
 ---
 
-_Generated 2026-06-08 from this repo's code + the `aggressor-benchmarking`
-`dataset-v4-600mains` analysis. If you retrain (scratch-7+) or rebuild the dataset,
-update §3–§4 from the new `results/instance_analysis_*` outputs._

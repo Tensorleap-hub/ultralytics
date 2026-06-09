@@ -1,9 +1,19 @@
 # Download the coco_subset data from S3 and point this repo at it
 
 Fetch a packaged `coco_subset` dataset from S3, extract it where the repo expects,
-and switch the integration to it. **v4m** is the active version; **v4** is identical
-except for the non-aggressor *validation* images (train is the same). Swap the
-version tag and everything else is the same.
+and switch the integration to it. **Three versions** exist — **v4**, **v4m**, **v4m2**
+— identical except for the **non-aggressor *validation* images** (train, true-aggressor,
+and false-aggressor pools are byte-identical across all three). Swap the version tag and
+everything else is the same:
+
+- **v4** — non-aggr largest-first, single-object (6,769 imgs, 1 box/img)
+- **v4m** — non-aggr false-matched on size + brightness, single-object (6,769 imgs, 1 box/img)
+- **v4m2** — non-aggr scene-matched to the true aggressors, multi-object (3,384 imgs, 2 box/img);
+  newest — also removes the scene-complexity shift (see `DATASET_AND_MODEL.md` §5 for the
+  metric comparison across all three).
+
+The **active** version = whatever `data:` in `ultralytics/cfg/default.yaml` points at
+(currently `coco_subset_v4m`).
 
 > What the dataset/model/metrics actually are: see `DATASET_AND_MODEL.md`.
 
@@ -15,7 +25,8 @@ Private bucket `aggrresors-benchmarking` (~4.1 GB each, contains `data.yaml`,
 
 | version | S3 key (under `s3://aggrresors-benchmarking/public-datasets/`) | local data root |
 |---|---|---|
-| **v4m** (active) | `coco_subset_v4m/coco_subcoco_dataset.tar.gz` | `<data_path>/coco_subset_v4m` |
+| **v4m2** (newest) | `coco_subset_v4m2/coco_subcoco_dataset.tar.gz` | `<data_path>/coco_subset_v4m2` |
+| v4m (currently wired) | `coco_subset_v4m/coco_subcoco_dataset.tar.gz` | `<data_path>/coco_subset_v4m` |
 | v4 | `coco_subset_v4/coco_subcoco_dataset.tar.gz` | `<data_path>/coco_subset_v4` |
 
 `<data_path>` = your local datasets directory (= `tensorleap_path` in
@@ -25,14 +36,15 @@ Private bucket `aggrresors-benchmarking` (~4.1 GB each, contains `data.yaml`,
 
 ```bash
 export AWS_PROFILE=dev          # private bucket; run `aws sso login` if the session expired
-VER=v4m                         # or: v4
+VER=v4m                         # or: v4, v4m2
 
 DST=<data_path>/coco_subset_$VER
 mkdir -p "$DST"
 aws s3 cp "s3://aggrresors-benchmarking/public-datasets/coco_subset_$VER/coco_subcoco_dataset.tar.gz" "$DST/"
 tar -xzf "$DST/coco_subcoco_dataset.tar.gz" -C "$DST" && rm "$DST/coco_subcoco_dataset.tar.gz"
 
-cat "$DST/split_counts.json"    # verify: val_all 11409, non_val_aggressors 6769, val_clean 7112
+cat "$DST/split_counts.json"    # verify — v4/v4m: val_all 11409, non_val_aggressors 6769, val_clean 7112
+                                #          v4m2:   val_all  8024, non_val_aggressors 3384, val_clean 3727
 ```
 
 The data root must match the `path:` in the repo's dataset yaml (§3). Ignore the
@@ -45,15 +57,17 @@ The data root must match the `path:` in the repo's dataset yaml (§3). Ignore th
 2. **`ultralytics/cfg/datasets/coco_subset_<VER>.yaml`** — already in the repo
    (`val: val_all.txt`, `nc: 20`). Set its `path:` to `<data_path>/coco_subset_<VER>`
    if your `<data_path>` differs from the value committed there.
-3. **Regenerate `aggressor_map.json`** for the chosen root (v4m's non-aggressor stems
-   differ from v4's — the default `--root` is **v4**, so pass it explicitly for v4m):
+3. **Regenerate `aggressor_map.json`** for the chosen root (each version's non-aggressor
+   stems differ — the default `--root` is **v4**, so pass it explicitly otherwise):
    ```bash
-   python scripts/build_aggressor_map.py --root <data_path>/coco_subset_v4m
-   # for v4:  python scripts/build_aggressor_map.py     (default root = coco_subset_v4)
+   python scripts/build_aggressor_map.py --root <data_path>/coco_subset_v4m2
+   # v4m:  python scripts/build_aggressor_map.py --root <data_path>/coco_subset_v4m
+   # v4:   python scripts/build_aggressor_map.py     (default root = coco_subset_v4)
    ```
 
 Optional knob — **`tensorleap_use_false_aggressors`** in `default.yaml` (currently
-`False`): keep/drop the 343 false-aggressor images in the val set (val 11,409 ↔ 11,066).
+`False`): keep/drop the 343 false-aggressor images in the val set (v4/v4m: 11,409 ↔ 11,066;
+v4m2: 8,024 ↔ 7,681).
 
 
 
