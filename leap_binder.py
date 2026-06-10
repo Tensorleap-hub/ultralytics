@@ -147,6 +147,7 @@ def instance_mask_encoder(idx: str, preprocess: PreprocessResponse, instance_idx
     x, y, w, h, label_id = label
     if np.isnan([x, y, w, h, label_id]).any():
         return None
+    w_norm, h_norm = float(w), float(h)   # normalized box dims, captured before the pixel conversion below
     img_width, img_height = mask.shape[1], mask.shape[2]
     x, y, w, h = round(x * img_width - ((w * img_width) / 2)), round(y * img_height - ((h * img_height) / 2)), round(w * img_width), round(h * img_height)
 
@@ -167,6 +168,9 @@ def instance_mask_encoder(idx: str, preprocess: PreprocessResponse, instance_idx
         "instance_aggressor_binary": "aggressor" if agg_role == "aggressor" else "not_an_aggressor",
         "instance_class": cls_name,
         "instance_is_aggressor": bool(agg_role == "aggressor"),
+        # Box geometry (normalized; area matches metadata_per_img's convention = w*h).
+        "instance_bbox_area": w_norm * h_norm,                              # normalized box area, 0-1
+        "instance_aspect_ratio": (h_norm / w_norm) if w_norm > 0 else 0.0,  # height / width
     }
     element_instance = ElementInstance(cls_name, mask, instance_metadata=instance_metadata)
 
