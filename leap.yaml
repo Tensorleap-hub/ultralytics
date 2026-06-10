@@ -1,5 +1,4 @@
-codeIntegrationId:
-projectId:
+projectId: 6a272e8cbde92e39967128e7
 secretId: ""
 branch: master
 entryFile: leap_integration.py
@@ -7,6 +6,7 @@ include:
     - leap_binder.py
     - leap_integration.py
     - aggressor_map.json
+    - instance_latents_val.npz
     - requirements.txt
     - ultralytics/tensorleap_folder/utils.py
     - ultralytics/tensorleap_folder/global_params.py

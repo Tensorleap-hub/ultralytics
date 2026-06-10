@@ -1,10 +1,11 @@
 import os
 import json
+import functools
 from pathlib import Path
 import cv2
 import torch
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_custom_loss, tensorleap_custom_metric, \
-    tensorleap_instances_length_encoder, tensorleap_custom_instances_metric
+    tensorleap_instances_length_encoder, tensorleap_custom_instances_metric, tensorleap_custom_latent_space
 from ultralytics.tensorleap_folder.global_params import cfg, yolo_data, criterion, all_clss,possible_float_like_nan_types,wanted_cls_dic, predictor
 from ultralytics.tensorleap_folder.utils import create_data_with_ult, pre_process_dataloader, \
     update_dict_count_cls, bbox_area_and_aspect_ratio, calculate_iou_all_pairs, get_dataset_split
@@ -94,6 +95,41 @@ def _base_idx(idx):
     per-instance ids of the form '<sample_id>_<instance_id>'. Either form (and a
     plain int) resolves to the underlying image index."""
     return int(str(idx).split('_')[0])
+
+
+# --- per-instance custom latent space -------------------------------------------------
+# Precomputed offline (scripts/compute_instance_latents.py): ROI-pooled features from the
+# last YOLO layer (Detect's 3 input maps, strides 8/16/32) per GT box, PCA -> 60. Saved
+# to instance_latents_val.npz keyed by "<image_stem>__<instance_idx>" (per instance) and
+# "<image_stem>" (per-sample mean). VAL only -- train and any missing id return zeros.
+_LATENT_DIM = 60
+_INSTANCE_LATENTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                      "instance_latents_val.npz")
+
+
+@functools.lru_cache(maxsize=1)
+def _load_instance_latents():
+    if not os.path.exists(_INSTANCE_LATENTS_PATH):
+        return {}
+    with np.load(_INSTANCE_LATENTS_PATH) as d:
+        return {k: d[k].astype(np.float32) for k in d.files}
+
+
+@tensorleap_custom_latent_space()
+def instance_latent_space(idx, preprocess: PreprocessResponse) -> np.ndarray:
+    """60-d latent per instance (and per-sample mean for base ids). Validation only;
+    train / unlabeled / missing ids -> zeros so they don't pollute the space."""
+    zeros = np.zeros(_LATENT_DIM, dtype=np.float32)
+    if preprocess.state != DataStateType.validation:
+        return zeros
+    emb = _load_instance_latents()
+    base = _base_idx(idx)
+    if not emb or base >= len(preprocess.data['dataloader']):   # defensive: stale-cache / bad id
+        return zeros
+    parts = str(idx).split('_')
+    stem = Path(preprocess.data['dataloader'].im_files[base]).stem
+    key = f"{stem}__{parts[1]}" if len(parts) > 1 else stem   # instance id vs base sample id
+    return emb.get(key, zeros)
 
 
 # --- evaluation class merge ------------------------------------------------------------
