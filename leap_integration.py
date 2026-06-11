@@ -21,7 +21,7 @@ prediction_type4 = PredictionTypeHandler(name='concatenate_80', labels=[str(i) f
 
 @tensorleap_load_model([prediction_type1,prediction_type2,prediction_type3,prediction_type4])
 def load_model():
-    model_path="/Users/yamtawachi/tensorleap/datasets/models/subcoco_v4/yolo11n.onnx"
+    model_path="/Users/yamtawachi/tensorleap/datasets/models/subcoco_v5/yolo11n.onnx"
     m_path = model_path if model_path != None else 'None_path'
     print("started custom tests")
     validate_supported_models(os.path.basename(cfg.model), m_path)
