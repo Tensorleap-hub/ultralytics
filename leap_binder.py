@@ -203,6 +203,11 @@ def instance_mask_encoder(idx: str, preprocess: PreprocessResponse, instance_idx
         # non_aggressor and false_aggressor controls) folds into not_an_aggressor.
         "instance_aggressor_binary": "aggressor" if agg_role == "aggressor" else "not_an_aggressor",
         "instance_class": cls_name,
+        "instance_gt_class_id": int(label_id),
+        # Family of the aggressor image this instance lives in (aggressor AND context
+        # instances share it); "none" for clean images. Enables per-family breakdowns and
+        # data-driven context exclusion downstream.
+        "instance_family": AGGRESSOR_MAP.get(stem, {}).get("family", "none"),
         "instance_is_aggressor": bool(agg_role == "aggressor"),
         # Box geometry (normalized; area matches metadata_per_img's convention = w*h).
         "instance_bbox_area": w_norm * h_norm,                              # normalized box area, 0-1
@@ -691,6 +696,59 @@ def instance_match_confidence(y_pred: np.ndarray, preprocess: SamplePreprocessRe
     for i in range(min(n_instances, best_pred_idx.shape[0])):
         if best_iou_per_gt[i] > 0:
             result[i] = np.array([confidences[best_pred_idx[i]]], dtype=np.float32)
+    return result
+
+
+def _instance_pred_match_setup(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
+    sample_id = _resolve_instance_sample_id(preprocess)
+    n_instances = instances_length_encoder(sample_id, preprocess.preprocess_response)
+    if n_instances == 0:
+        return n_instances, None, None, None
+    batch = preprocess.preprocess_response.data['dataloader'][_base_idx(sample_id)]
+    batch["imgsz"] = (batch["resized_shape"],)
+    batch["ori_shape"] = (batch["ori_shape"],)
+    batch["ratio_pad"] = (batch["ratio_pad"],)
+    batch["img"] = batch["img"].unsqueeze(0)
+    pred = predictor.postprocess(torch.from_numpy(y_pred.copy()))[0]
+    predictor.seen = 0
+    predictor.args.plots = False
+    predictor.stats = {'tp': []}
+    pbatch = predictor._prepare_batch(0, batch)
+    gt_cls, gt_bbox = pbatch.pop("cls"), pbatch.pop("bbox")
+    predn = predictor._prepare_pred(pred, pbatch)
+    return n_instances, gt_cls, gt_bbox, predn
+
+
+@tensorleap_custom_instances_metric("instance_best_iou_agnostic", direction=MetricDirection.Downward)
+def instance_best_iou_agnostic(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
+    """Per-GT-instance localization error 1 - best CLASS-AGNOSTIC IoU with any prediction
+    (1 if nothing overlaps). Lets the benchmark split same-class failures into miss
+    (nothing overlaps) vs wrong-class (overlaps, but the best box is the wrong class)."""
+    n_instances, gt_cls, gt_bbox, predn = _instance_pred_match_setup(y_pred, preprocess)
+    result = {i: np.ones(1, dtype=np.float32) for i in range(n_instances)}
+    if n_instances == 0 or predn is None or predn.shape[0] == 0 or gt_bbox.shape[0] == 0:
+        return result
+    iou_mat = box_iou(gt_bbox, predn[:, :4])
+    best_iou_per_gt = iou_mat.max(dim=1).values.numpy()
+    for i in range(min(n_instances, best_iou_per_gt.shape[0])):
+        result[i] = np.array([1.0 - best_iou_per_gt[i]], dtype=np.float32)
+    return result
+
+
+@tensorleap_custom_instances_metric("instance_pred_class", direction=MetricDirection.Downward)
+def instance_pred_class(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
+    """Per-GT-instance class id of the best class-agnostic overlapping prediction (-1 if none)."""
+    n_instances, gt_cls, gt_bbox, predn = _instance_pred_match_setup(y_pred, preprocess)
+    result = {i: np.array([-1.0], dtype=np.float32) for i in range(n_instances)}
+    if n_instances == 0 or predn is None or predn.shape[0] == 0 or gt_bbox.shape[0] == 0:
+        return result
+    iou_mat = box_iou(gt_bbox, predn[:, :4])
+    best_idx = iou_mat.argmax(dim=1).numpy()
+    best_iou_per_gt = iou_mat.max(dim=1).values.numpy()
+    pred_cls = predn[:, 5].numpy()
+    for i in range(min(n_instances, best_idx.shape[0])):
+        if best_iou_per_gt[i] > 0:
+            result[i] = np.array([float(pred_cls[best_idx[i]])], dtype=np.float32)
     return result
 
 
