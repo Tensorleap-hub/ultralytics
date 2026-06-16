@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import shutil
@@ -6,21 +7,42 @@ from pathlib import Path
 
 import numpy as np
 import torch
+import yaml
 from code_loader.contract.datasetclasses import PreprocessResponse
+from code_loader.contract.responsedataclasses import BoundingBox
 from ultralytics.data import  build_yolo_dataset
 from ultralytics.utils.plotting import output_to_target
+from ultralytics.tensorleap_folder.global_params import cfg, all_clss, predictor
+
+
+_CONFIG_PATH = Path(__file__).resolve().parent / 'tensorleap_config.yaml'
+with open(_CONFIG_PATH) as _cfg_file:
+    _TL_CONFIG = yaml.safe_load(_cfg_file)
+
+MERGE_LABEL = _TL_CONFIG['merge_label']
+EVAL_CLASS_MERGE = {int(k): int(v) for k, v in (_TL_CONFIG.get('eval_class_merge') or {}).items()}
+FAMILY_TO_CLASS = dict(_TL_CONFIG['family_to_class'])
+
+_AGG_MAP_PATH = Path(__file__).resolve().parents[2] / _TL_CONFIG['aggressor_map_filename']
+try:
+    with open(_AGG_MAP_PATH) as _agg_file:
+        AGGRESSOR_MAP = json.load(_agg_file)
+except FileNotFoundError:
+    AGGRESSOR_MAP = {}
+
+FALSE_AGGRESSOR_STEMS = {stem for stem, info in AGGRESSOR_MAP.items()
+                         if info.get("role") == "false_aggressor"}
+
+CLASS_NAME_TO_ID = {name: idx for idx, name in all_clss.items()}
+FAMILY_TO_CLASS_ID = {fam: CLASS_NAME_TO_ID[cls] for fam, cls in FAMILY_TO_CLASS.items()
+                      if cls in CLASS_NAME_TO_ID}
 
 
 def _filtered_img_list(img_path, exclude_stems):
-    """Return a path to an image-list txt with images whose stem is in `exclude_stems`
-    removed. Only txt-list inputs are filtered (dir inputs are returned unchanged).
-    Relative './...' lines are made absolute (so the temp file can live anywhere --
-    build_yolo_dataset resolves './' relative to the LIST's parent dir), but withOUT
-    following symlinks: the dataset images are symlinks into external roots, and YOLO
-    derives each label path by replacing '/images/' -> '/labels/' in the IMAGE path.
-    Resolving the symlink (Path.resolve) points the path at the target's home dir,
-    where no '/labels/' sibling exists -> every image loads as a background (0 GT).
-    os.path.abspath normalizes to an absolute path while keeping the symlink in place."""
+    # Drop excluded stems from a txt image-list (dir inputs pass through unchanged).
+    # Use os.path.abspath, not resolve(): the images are symlinks and YOLO derives
+    # labels by swapping '/images/'->'/labels/' in the image path, so the symlink
+    # must stay in place or every image loads as a background (0 GT).
     if not exclude_stems or not str(img_path).endswith(".txt"):
         return img_path
     parent = Path(img_path).parent
@@ -43,17 +65,12 @@ def create_data_with_ult(cfg,yolo_data, phase='val', exclude_stems=None):
     n_samples = sum(1 for _ in open(img_path)) if str(img_path).endswith(".txt") else len(
         os.listdir(img_path))
     dataset = build_yolo_dataset(cfg, img_path,n_samples , yolo_data, mode='val', stride=32)
-    # The txt line count above is only a hint for build_yolo_dataset's batch arg. The
-    # element-instance preprocess dereferences EVERY sample id at parse time, so the sample
-    # count must match the dataset that was actually built (the scan can drop images or load
-    # from a stale .cache). Reporting the txt count instead of len(dataset) makes the sweep
-    # index past self.labels -> IndexError: list index out of range. Report the real length.
+    # Report the real dataset length: the txt line count can differ (dropped images /
+    # stale .cache) and would index past self.labels during the parse-time sweep.
     return dataset, len(dataset)
 
 def pre_process_dataloader(preprocessresponse:PreprocessResponse, idx, predictor):
-    # element-instance preprocess uses str sample ids ('k') and per-instance ids
-    # ('k_i'); resolve either (or a plain int) to the underlying image index.
-    idx = int(str(idx).split('_')[0])
+    idx = base_idx(idx)
     batch= preprocessresponse.data['dataloader'][idx]
     batch = predictor.preprocess(batch)
     imgs, clss, bboxes, batch_idxs, ori_shape, resized_shape,ratio_pad = batch['img'], batch['cls'], batch['bboxes'], batch['batch_idx'],batch['ori_shape'],batch['resized_shape'],batch['ratio_pad']
@@ -186,3 +203,110 @@ def set_leap_yaml2root(cfg):
     assert cfg.task == "detect", "Running detect leap binder while default.yaml task is set to pose"
     root = Path(__file__).resolve().parents[2]
     shutil.copy(Path(__file__).resolve().parent / 'detect'/'leap.yaml', root / 'leap.yaml')
+
+
+def base_idx(idx):
+    return int(str(idx).split('_')[0])
+
+
+def instance_aggressor_role(stem, instance_cls_id):
+    info = AGGRESSOR_MAP.get(stem)
+    if not info:
+        return "non_aggressor"
+    role = info.get("role")
+    if role == "non_aggressor":
+        return "non_aggressor"
+    target = FAMILY_TO_CLASS_ID.get(info.get("family"))
+    is_target = target is not None and int(instance_cls_id) == target
+    if role == "aggressor":
+        return "aggressor" if is_target else "context"
+    if role == "false_aggressor":
+        return "false_aggressor" if is_target else "context"
+    return "non_aggressor"
+
+
+def merge_eval_cls(cls):
+    if hasattr(cls, "clone"):
+        out = cls.clone()
+        for src, dst in EVAL_CLASS_MERGE.items():
+            out[out == src] = dst
+        return out
+    out = np.asarray(cls).copy()
+    for src, dst in EVAL_CLASS_MERGE.items():
+        out[out == src] = dst
+    return out
+
+
+def eval_cls_name(idx):
+    idx = int(idx)
+    if idx in EVAL_CLASS_MERGE:
+        idx = EVAL_CLASS_MERGE[idx]
+    if idx in EVAL_CLASS_MERGE.values():
+        return MERGE_LABEL
+    return all_clss.get(idx, "Unknown Class")
+
+
+def finite_or_none(d):
+    # JSON / Elasticsearch cannot encode NaN or Infinity; index non-finite values as null.
+    return {k: (None if isinstance(v, (float, np.floating)) and not np.isfinite(v) else v)
+            for k, v in d.items()}
+
+
+def instance_parts(preprocess):
+    sid = str(np.asarray(preprocess.sample_ids).reshape(-1)[0])
+    mapping = getattr(preprocess.preprocess_response, 'instance_to_sample_ids_mappings', None)
+    base_id = mapping.get(sid, sid) if mapping else sid
+    instance_idx = int(sid.rsplit('_', 1)[1]) if base_id != sid else None
+    return base_id, instance_idx
+
+
+def decoded_pred_boxes(image_chw, predictions):
+    y_pred = predictor.postprocess(torch.from_numpy(predictions.copy()))
+    _, cls_temp, bbx_temp, conf_temp = output_to_target(y_pred, max_det=predictor.args.max_det)
+    t_pred = np.concatenate([bbx_temp, np.expand_dims(conf_temp, 1), np.expand_dims(cls_temp, 1)], axis=1)
+    t_pred = t_pred[t_pred[:, 4] > (getattr(cfg, "conf", 0.25) or 0.25)]
+    t_pred[:, :4:2] /= image_chw.shape[1]
+    t_pred[:, 1:4:2] /= image_chw.shape[2]
+    return t_pred
+
+
+def to_labeled_bboxes(rows, label, conf=None):
+    return [BoundingBox(x=float(r[0]), y=float(r[1]), width=float(r[2]), height=float(r[3]),
+                        confidence=float(conf if conf is not None else r[4]), label=label)
+            for r in rows]
+
+
+def base_image_and_gt(preprocess, input_encoder, gt_encoder):
+    base_id, inst = instance_parts(preprocess)
+    img = input_encoder(base_id, preprocess.preprocess_response)
+    img = img[0] if img.ndim == 4 else img
+    gt = gt_encoder(base_id, preprocess.preprocess_response)
+    gt = gt[0] if gt.ndim == 3 else gt
+    gt = gt[~np.isnan(gt).any(axis=1)]
+    return img, gt, inst
+
+
+def resolve_instance_sample_id(preprocess):
+    id_ = str(np.asarray(preprocess.sample_ids).reshape(-1)[0])
+    mapping = getattr(preprocess.preprocess_response, 'instance_to_sample_ids_mappings', None)
+    return mapping.get(id_, id_) if mapping else id_
+
+
+def instance_pred_match_setup(y_pred, preprocess, instances_length_encoder):
+    sample_id = resolve_instance_sample_id(preprocess)
+    n_instances = instances_length_encoder(sample_id, preprocess.preprocess_response)
+    if n_instances == 0:
+        return n_instances, None, None, None
+    batch = preprocess.preprocess_response.data['dataloader'][base_idx(sample_id)]
+    batch["imgsz"] = (batch["resized_shape"],)
+    batch["ori_shape"] = (batch["ori_shape"],)
+    batch["ratio_pad"] = (batch["ratio_pad"],)
+    batch["img"] = batch["img"].unsqueeze(0)
+    pred = predictor.postprocess(torch.from_numpy(y_pred.copy()))[0]
+    predictor.seen = 0
+    predictor.args.plots = False
+    predictor.stats = {'tp': []}
+    pbatch = predictor._prepare_batch(0, batch)
+    gt_cls, gt_bbox = pbatch.pop("cls"), pbatch.pop("bbox")
+    predn = predictor._prepare_pred(pred, pbatch)
+    return n_instances, gt_cls, gt_bbox, predn
