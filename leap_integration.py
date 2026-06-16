@@ -3,9 +3,10 @@ from code_loader.contract.datasetclasses import SamplePreprocessResponse
 from leap_binder import (input_encoder, preprocess_func_leap, gt_encoder,
                          loss, gt_bb_decoder, image_visualizer, bb_decoder,
                          cost, metadata_per_img, ious, confusion_matrix_metric,
-                         metadata_aggressor, instance_best_iou, instance_match_confidence,
+                         metadata_aggressor, instance_best_iou_loss, instance_match_confidence,
                          image_visualizer_original, gt_pred_bb_visualizer,
-                         instance_zoom_visualizer, instance_full_image_visualizer)
+                         instance_zoom_visualizer, instance_full_image_visualizer, instance_best_iou_agnostic,
+                         instance_pred_class)
 import onnxruntime as ort
 import numpy as np
 from ultralytics.tensorleap_folder.utils import validate_supported_models, set_leap_yaml2root
@@ -45,8 +46,10 @@ def check_custom_test_mapping(idx, subset):
     cost_dic=cost(y_pred[1],y_pred[2],y_pred[3],gt)
     iou=ious(y_pred[0], s_prepro)
     conf_mat = confusion_matrix_metric(y_pred[0], s_prepro)
-    ibi = instance_best_iou(y_pred[0], s_prepro)
+    ibi = instance_best_iou_loss(y_pred[0], s_prepro)
     imc = instance_match_confidence(y_pred[0], s_prepro)
+    iiou_agnoxtic=instance_best_iou_agnostic(y_pred[0], s_prepro)
+    ipred_cls=instance_pred_class(y_pred[0], s_prepro)
     # metadata
     meta_data=metadata_per_img(idx, subset)
     agg_meta = metadata_aggressor(idx, subset)

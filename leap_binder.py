@@ -29,76 +29,6 @@ from ultralytics.tensorleap_folder.utils import (create_data_with_ult, pre_proce
                                                  to_labeled_bboxes, base_image_and_gt, instance_pred_match_setup)
 
 
-# ----------------------------------------------------data processing---------------------------------------------------
-
-@tensorleap_instances_masks_encoder('image')
-def instance_mask_encoder(idx: str, preprocess: PreprocessResponse, instance_idx) -> ElementInstance:
-    gt = gt_encoder(idx, preprocess)
-    label = gt[instance_idx]
-    mask = np.zeros((3, 640, 640))
-    x, y, w, h, label_id = label
-    if np.isnan([x, y, w, h, label_id]).any():
-        return None
-    w_norm, h_norm = float(w), float(h)
-    img_width, img_height = mask.shape[1], mask.shape[2]
-    x, y, w, h = round(x * img_width - ((w * img_width) / 2)), round(y * img_height - ((h * img_height) / 2)), round(w * img_width), round(h * img_height)
-
-    mask[:, y:y+h, x:x+w] = 1
-
-    cls_name = all_clss.get(int(label_id), "Unknown Class")
-    stem = Path(preprocess.data['dataloader'].im_files[base_idx(idx)]).stem
-    agg_role = instance_aggressor_role(stem, int(label_id))
-    instance_metadata = {
-        "instance_aggressor_role": agg_role,
-        "instance_aggressor_name": (AGGRESSOR_MAP.get(stem, {}).get("family", "aggressor")
-                                    if agg_role == "aggressor" else agg_role),
-        "instance_aggressor_binary": "aggressor" if agg_role == "aggressor" else "not_an_aggressor",
-        "instance_class": cls_name,
-        "instance_gt_class_id": int(label_id),
-        "instance_family": AGGRESSOR_MAP.get(stem, {}).get("family", "none"),
-        "instance_is_aggressor": bool(agg_role == "aggressor"),
-        "instance_bbox_area": w_norm * h_norm,
-        "instance_aspect_ratio": (h_norm / w_norm) if w_norm > 0 else 0.0,
-    }
-    return ElementInstance(cls_name, mask, instance_metadata=instance_metadata)
-
-
-@tensorleap_instances_length_encoder('image')
-def instances_length_encoder(idx: str, preprocess: PreprocessResponse) -> int:
-    if base_idx(idx) >= len(preprocess.data['dataloader']):
-        return 0
-    gt = gt_encoder(idx, preprocess)
-    for label in gt:
-        x, y, w, h, label_id = label
-        if np.isnan([x, y, w, h, label_id]).any():
-            return 0
-    return len(gt)
-
-
-@tensorleap_element_instance_preprocess(instances_length_encoder, instance_mask_encoder)
-def preprocess_func_leap() -> List[PreprocessResponse]:
-    dataset_types = [DataStateType.training, DataStateType.validation]
-    phases = ['train', 'val']
-    responses = []
-    if cfg.tensorleap_use_test:
-        phases.append('test')
-        dataset_types.append(DataStateType.test)
-    if cfg.tensorleap_use_unlabeled:
-        phases.append('unlabeled')
-        dataset_types.append(DataStateType.unlabeled)
-    drop_false = not getattr(cfg, "tensorleap_use_false_aggressors", True)
-    for phase, dataset_type in zip(phases, dataset_types):
-        exclude_stems = FALSE_AGGRESSOR_STEMS if (drop_false and phase == 'val') else None
-        data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase,
-                                                      exclude_stems=exclude_stems)
-        sample_ids = [str(idd) for idd in range(n_samples)]
-        responses.append(
-            PreprocessResponse(sample_ids=sample_ids,
-                               data={'dataloader':data_loader},
-                               sample_id_type=str,
-                               state=dataset_type))
-    return responses
-
 
 # ------------------------------------------input and gt----------------------------------------------------------------
 
@@ -221,8 +151,6 @@ def bb_decoder(image: np.ndarray, predictions: np.ndarray) -> LeapImageWithBBox:
     return LeapImageWithBBox(data=(image.transpose(1,2,0)), bounding_boxes=bbox)
 
 
-# --------------------------------------------instance visualizers------------------------------------------------------
-
 @tensorleap_custom_visualizer("gt_pred_bb_visualizer", LeapDataType.ImageWithBBox)
 def gt_pred_bb_visualizer(image: np.ndarray, bb_gt: np.ndarray, predictions: np.ndarray) -> LeapImageWithBBox:
     image = image.squeeze(0) if image.ndim == 4 else image
@@ -231,49 +159,6 @@ def gt_pred_bb_visualizer(image: np.ndarray, bb_gt: np.ndarray, predictions: np.
     bboxes = (to_labeled_bboxes(gt[:, :4], 'gt', conf=1.0) +
               to_labeled_bboxes(decoded_pred_boxes(image, predictions), 'pred'))
     return LeapImageWithBBox(data=rescale_min_max(image).transpose(1, 2, 0), bounding_boxes=bboxes)
-
-
-@tensorleap_custom_visualizer("instance_zoom_visualizer", LeapDataType.ImageWithBBox)
-def instance_zoom_visualizer(image: np.ndarray, predictions: np.ndarray,
-                             preprocess: SamplePreprocessResponse) -> LeapImageWithBBox:
-    img, gt, inst = base_image_and_gt(preprocess, input_encoder, gt_encoder)
-    preds = decoded_pred_boxes(img, predictions)
-    H, W = img.shape[1], img.shape[2]
-    if inst is None or inst >= len(gt):
-        x1, y1, x2, y2 = 0.0, 0.0, 1.0, 1.0
-    else:
-        x, y, w, h = gt[inst, :4]
-        mx, my = max(float(w) * 0.5, 0.05), max(float(h) * 0.5, 0.05)
-        x1, y1 = max(float(x - w / 2) - mx, 0.0), max(float(y - h / 2) - my, 0.0)
-        x2, y2 = min(float(x + w / 2) + mx, 1.0), min(float(y + h / 2) + my, 1.0)
-    crop = img[:, int(y1 * H):int(np.ceil(y2 * H)), int(x1 * W):int(np.ceil(x2 * W))]
-    cw, ch = max(x2 - x1, 1e-6), max(y2 - y1, 1e-6)
-
-    def _remap(rows, label, conf=None):
-        return [BoundingBox(x=float((r[0] - x1) / cw), y=float((r[1] - y1) / ch),
-                            width=float(r[2] / cw), height=float(r[3] / ch),
-                            confidence=float(conf if conf is not None else r[4]), label=label)
-                for r in rows]
-
-    bboxes = _remap(gt[:, :4], 'gt', 1.0) + _remap(preds, 'pred')
-    return LeapImageWithBBox(data=rescale_min_max(crop).transpose(1, 2, 0), bounding_boxes=bboxes)
-
-
-@tensorleap_custom_visualizer("instance_full_image_visualizer", LeapDataType.ImageWithBBox)
-def instance_full_image_visualizer(image: np.ndarray, predictions: np.ndarray,
-                                   preprocess: SamplePreprocessResponse) -> LeapImageWithBBox:
-    img, gt, inst = base_image_and_gt(preprocess, input_encoder, gt_encoder)
-    preds = decoded_pred_boxes(img, predictions)
-    disp = np.ascontiguousarray(rescale_min_max(img).transpose(1, 2, 0))
-    if inst is not None and inst < len(gt):
-        H, W = disp.shape[0], disp.shape[1]
-        x, y, w, h = gt[inst, :4]
-        cv2.rectangle(disp,
-                      (int((x - w / 2) * W), int((y - h / 2) * H)),
-                      (int((x + w / 2) * W), int((y + h / 2) * H)),
-                      (255, 255, 0), 2)
-    bboxes = to_labeled_bboxes(gt[:, :4], 'gt', conf=1.0) + to_labeled_bboxes(preds, 'pred')
-    return LeapImageWithBBox(data=disp, bounding_boxes=bboxes)
 
 
 # ----------------------------------------------------------metrics-----------------------------------------------------
@@ -397,10 +282,84 @@ def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResp
     return [confusion_matrix_elements]
 
 
-# ----------------------------------------------------instance metrics--------------------------------------------------
+# ----------------------------------------------------instance level --------------------------------------------------
 
-@tensorleap_custom_instances_metric("instance_best_iou", direction=MetricDirection.Downward)
-def instance_best_iou(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
+# ------ preprocess -------
+@tensorleap_instances_masks_encoder('image')
+def instance_mask_encoder(idx: str, preprocess: PreprocessResponse, instance_idx) -> ElementInstance:
+    gt = gt_encoder(idx, preprocess)
+    label = gt[instance_idx]
+    mask = np.zeros((3, 640, 640))
+    x, y, w, h, label_id = label
+    if np.isnan([x, y, w, h, label_id]).any():
+        return None
+    w_norm, h_norm = float(w), float(h)
+    img_width, img_height = mask.shape[1], mask.shape[2]
+    x, y, w, h = round(x * img_width - ((w * img_width) / 2)), round(y * img_height - ((h * img_height) / 2)), round(w * img_width), round(h * img_height)
+
+    mask[:, y:y+h, x:x+w] = 1
+
+    cls_name = all_clss.get(int(label_id), "Unknown Class")
+    stem = Path(preprocess.data['dataloader'].im_files[base_idx(idx)]).stem
+    agg_role = instance_aggressor_role(stem, int(label_id))
+    instance_metadata = {
+        "instance_aggressor_role": agg_role,
+        "instance_aggressor_name": (AGGRESSOR_MAP.get(stem, {}).get("family", "aggressor")
+                                    if agg_role == "aggressor" else agg_role),
+        "instance_aggressor_binary": "aggressor" if agg_role == "aggressor" else "not_an_aggressor",
+        "instance_class": cls_name,
+        "instance_gt_class_id": int(label_id),
+        "instance_family": AGGRESSOR_MAP.get(stem, {}).get("family", "none"),
+        "instance_is_aggressor": bool(agg_role == "aggressor"),
+        "instance_bbox_area": w_norm * h_norm,
+        "instance_aspect_ratio": (h_norm / w_norm) if w_norm > 0 else 0.0,
+    }
+    return ElementInstance(cls_name, mask, instance_metadata=instance_metadata)
+
+
+@tensorleap_instances_length_encoder('image')
+def instances_length_encoder(idx: str, preprocess: PreprocessResponse) -> int:
+    if base_idx(idx) >= len(preprocess.data['dataloader']):
+        return 0
+    gt = gt_encoder(idx, preprocess)
+    for label in gt:
+        x, y, w, h, label_id = label
+        if np.isnan([x, y, w, h, label_id]).any():
+            return 0
+    return len(gt)
+
+
+@tensorleap_element_instance_preprocess(instances_length_encoder, instance_mask_encoder)
+def preprocess_func_leap() -> List[PreprocessResponse]:
+    dataset_types = [DataStateType.training, DataStateType.validation]
+    phases = ['train', 'val']
+    responses = []
+    if cfg.tensorleap_use_test:
+        phases.append('test')
+        dataset_types.append(DataStateType.test)
+    if cfg.tensorleap_use_unlabeled:
+        phases.append('unlabeled')
+        dataset_types.append(DataStateType.unlabeled)
+    drop_false = not getattr(cfg, "tensorleap_use_false_aggressors", True)
+    for phase, dataset_type in zip(phases, dataset_types):
+        exclude_stems = FALSE_AGGRESSOR_STEMS if (drop_false and phase == 'val') else None
+        data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase,
+                                                      exclude_stems=exclude_stems)
+        sample_ids = [str(idd) for idd in range(n_samples)]
+        responses.append(
+            PreprocessResponse(sample_ids=sample_ids,
+                               data={'dataloader':data_loader},
+                               sample_id_type=str,
+                               state=dataset_type))
+    return responses
+
+
+
+# --- metrics ----
+
+
+@tensorleap_custom_instances_metric("instance_best_iou_loss", direction=MetricDirection.Downward)
+def instance_best_iou_loss(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
     n_instances, gt_cls, gt_bbox, predn = instance_pred_match_setup(y_pred, preprocess, instances_length_encoder)
     result = {i: np.ones(1, dtype=np.float32) for i in range(n_instances)}
     if n_instances == 0 or predn is None or predn.shape[0] == 0 or gt_bbox.shape[0] == 0:
@@ -445,7 +404,7 @@ def instance_best_iou_agnostic(y_pred: np.ndarray, preprocess: SamplePreprocessR
     return result
 
 
-@tensorleap_custom_instances_metric("instance_pred_class", direction=MetricDirection.Downward)
+@tensorleap_custom_instances_metric("instance_pred_class", compute_insights=False)
 def instance_pred_class(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
     n_instances, gt_cls, gt_bbox, predn = instance_pred_match_setup(y_pred, preprocess, instances_length_encoder)
     result = {i: np.array([-1.0], dtype=np.float32) for i in range(n_instances)}
@@ -459,3 +418,53 @@ def instance_pred_class(y_pred: np.ndarray, preprocess: SamplePreprocessResponse
         if best_iou_per_gt[i] > 0:
             result[i] = np.array([float(pred_cls[best_idx[i]])], dtype=np.float32)
     return result
+
+
+
+
+
+
+
+# --- viz  ---
+@tensorleap_custom_visualizer("instance_zoom_visualizer", LeapDataType.ImageWithBBox)
+def instance_zoom_visualizer(image: np.ndarray, predictions: np.ndarray,
+                             preprocess: SamplePreprocessResponse) -> LeapImageWithBBox:
+    img, gt, inst = base_image_and_gt(preprocess, input_encoder, gt_encoder)
+    preds = decoded_pred_boxes(img, predictions)
+    H, W = img.shape[1], img.shape[2]
+    if inst is None or inst >= len(gt):
+        x1, y1, x2, y2 = 0.0, 0.0, 1.0, 1.0
+    else:
+        x, y, w, h = gt[inst, :4]
+        mx, my = max(float(w) * 0.5, 0.05), max(float(h) * 0.5, 0.05)
+        x1, y1 = max(float(x - w / 2) - mx, 0.0), max(float(y - h / 2) - my, 0.0)
+        x2, y2 = min(float(x + w / 2) + mx, 1.0), min(float(y + h / 2) + my, 1.0)
+    crop = img[:, int(y1 * H):int(np.ceil(y2 * H)), int(x1 * W):int(np.ceil(x2 * W))]
+    cw, ch = max(x2 - x1, 1e-6), max(y2 - y1, 1e-6)
+
+    def _remap(rows, label, conf=None):
+        return [BoundingBox(x=float((r[0] - x1) / cw), y=float((r[1] - y1) / ch),
+                            width=float(r[2] / cw), height=float(r[3] / ch),
+                            confidence=float(conf if conf is not None else r[4]), label=label)
+                for r in rows]
+
+    bboxes = _remap(gt[:, :4], 'gt', 1.0) + _remap(preds, 'pred')
+    return LeapImageWithBBox(data=rescale_min_max(crop).transpose(1, 2, 0), bounding_boxes=bboxes)
+
+
+@tensorleap_custom_visualizer("instance_full_image_visualizer", LeapDataType.ImageWithBBox)
+def instance_full_image_visualizer(image: np.ndarray, predictions: np.ndarray,
+                                   preprocess: SamplePreprocessResponse) -> LeapImageWithBBox:
+    img, gt, inst = base_image_and_gt(preprocess, input_encoder, gt_encoder)
+    preds = decoded_pred_boxes(img, predictions)
+    disp = np.ascontiguousarray(rescale_min_max(img).transpose(1, 2, 0))
+    if inst is not None and inst < len(gt):
+        H, W = disp.shape[0], disp.shape[1]
+        x, y, w, h = gt[inst, :4]
+        cv2.rectangle(disp,
+                      (int((x - w / 2) * W), int((y - h / 2) * H)),
+                      (int((x + w / 2) * W), int((y + h / 2) * H)),
+                      (255, 255, 0), 2)
+    bboxes = to_labeled_bboxes(gt[:, :4], 'gt', conf=1.0) + to_labeled_bboxes(preds, 'pred')
+    return LeapImageWithBBox(data=disp, bounding_boxes=bboxes)
+
