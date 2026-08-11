@@ -29,7 +29,7 @@ prediction_type4 = PredictionTypeHandler(name='concatenate_80', labels=[str(i) f
 
 @tensorleap_load_model([prediction_type1,prediction_type2,prediction_type3,prediction_type4])
 def load_model():
-    model_path="/Users/orram/Tensorleap/ultralytics/yolo11s.onnx"
+    model_path="models/yolo11s.onnx"
     m_path = model_path if model_path != None else 'None_path'
     print("started custom tests")
     validate_supported_models(os.path.basename(cfg.model), m_path)
@@ -68,4 +68,4 @@ def check_custom_test_mapping(idx, subset):
 
 if __name__ == '__main__':
     set_leap_yaml2root(cfg)
-    check_custom_test_mapping(0, preprocess_func_leap()[1])
+    check_custom_test_mapping('0', preprocess_func_leap()[1])

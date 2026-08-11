@@ -2,14 +2,20 @@ import os
 from typing import List
 
 import numpy as np
-from code_loader.contract.datasetclasses import DataStateType, PreprocessResponse
+from code_loader.contract.datasetclasses import (
+    DataStateType,
+    ElementInstance,
+    PreprocessResponse,
+)
 from code_loader.inner_leap_binder.leapbinder_decorators import (
+    tensorleap_element_instance_preprocess,
     tensorleap_gt_encoder,
     tensorleap_input_encoder,
-    tensorleap_preprocess,
+    tensorleap_instances_length_encoder,
+    tensorleap_instances_masks_encoder,
 )
 
-from ultralytics.tensorleap_folder.global_params import cfg, predictor, yolo_data
+from ultralytics.tensorleap_folder.global_params import all_clss, cfg, predictor, yolo_data
 from ultralytics.tensorleap_folder.utils import (
     create_data_with_ult,
     get_dataset_split,
@@ -24,7 +30,42 @@ def _limit_sample_ids(sample_ids):
     return sample_ids[: int(max_samples)]
 
 
-@tensorleap_preprocess()
+def _sample_index(sample_id) -> int:
+    """Element-instance ids arrive as '<sample_id>_<instance_id>'; keep only the image index.
+
+    Metrics pass SamplePreprocessResponse.sample_ids, which is a 1-element sequence rather than a
+    scalar, so unwrap it before parsing.
+    """
+    if isinstance(sample_id, (list, tuple, np.ndarray)):
+        sample_id = np.asarray(sample_id).reshape(-1)[0]
+    return int(str(sample_id).split("_")[0])
+
+
+def _valid_gt_boxes(sample_id, preprocess: PreprocessResponse) -> np.ndarray:
+    gt = gt_encoder(sample_id, preprocess)
+    return gt[~np.isnan(gt).any(axis=1)]
+
+
+@tensorleap_instances_length_encoder("image")
+def instance_length_encoder(sample_id: str, preprocess: PreprocessResponse) -> int:
+    return int(_valid_gt_boxes(sample_id, preprocess).shape[0])
+
+
+@tensorleap_instances_masks_encoder("image")
+def instance_mask_encoder(
+    sample_id: str, preprocess: PreprocessResponse, instance_id: int
+) -> ElementInstance:
+    cx, cy, w, h, cls = _valid_gt_boxes(sample_id, preprocess)[instance_id]
+    image = input_encoder(sample_id, preprocess)
+    height, width = image.shape[-2], image.shape[-1]
+    x0, x1 = int(np.clip((cx - w / 2) * width, 0, width)), int(np.clip((cx + w / 2) * width, 0, width))
+    y0, y1 = int(np.clip((cy - h / 2) * height, 0, height)), int(np.clip((cy + h / 2) * height, 0, height))
+    mask = np.zeros(image.shape, dtype=np.float32)
+    mask[..., y0 : max(y1, y0 + 1), x0 : max(x1, x0 + 1)] = 1.0
+    return ElementInstance(name=all_clss.get(int(cls), "Unknown Class"), mask=mask)
+
+
+@tensorleap_element_instance_preprocess(instance_length_encoder, instance_mask_encoder)
 def preprocess_func_leap() -> List[PreprocessResponse]:
     dataset_types = [DataStateType.training, DataStateType.validation]
     phases = ["train", "val"]
@@ -47,9 +88,9 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
         )
         responses.append(
             PreprocessResponse(
-                sample_ids=_limit_sample_ids(sample_ids),
+                sample_ids=[str(i) for i in _limit_sample_ids(sample_ids)],
                 data={"dataloader": data_loader},
-                sample_id_type=int,
+                sample_id_type=str,
                 state=dataset_type,
             )
         )
@@ -57,16 +98,16 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
 
 
 @tensorleap_input_encoder("image", channel_dim=1)
-def input_encoder(idx: int, preprocess: PreprocessResponse) -> np.ndarray:
-    imgs, _, _, _ = pre_process_dataloader(preprocess, idx, predictor)
+def input_encoder(idx: str, preprocess: PreprocessResponse) -> np.ndarray:
+    imgs, _, _, _ = pre_process_dataloader(preprocess, _sample_index(idx), predictor)
     return imgs.astype("float32")
 
 
 @tensorleap_gt_encoder("classes")
-def gt_encoder(idx: int, preprocessing: PreprocessResponse) -> np.ndarray:
+def gt_encoder(idx: str, preprocessing: PreprocessResponse) -> np.ndarray:
     if preprocessing.state == DataStateType.unlabeled:
         return np.full((1, 5), np.nan, dtype=np.float32)
-    _, clss, bboxes, _ = pre_process_dataloader(preprocessing, idx, predictor)
+    _, clss, bboxes, _ = pre_process_dataloader(preprocessing, _sample_index(idx), predictor)
     if clss.shape[0] == 0 and bboxes.shape[0] == 0:
         return np.full((1, 5), np.nan, dtype=np.float32)
     if clss.shape[0] == 0:

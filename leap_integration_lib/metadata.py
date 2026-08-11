@@ -4,7 +4,7 @@ import numpy as np
 from code_loader.contract.datasetclasses import PreprocessResponse
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_metadata
 
-from leap_integration_lib.data import gt_encoder
+from leap_integration_lib.data import _sample_index, gt_encoder
 from ultralytics.tensorleap_folder.global_params import (
     all_clss,
     possible_float_like_nan_types,
@@ -17,28 +17,29 @@ from ultralytics.tensorleap_folder.utils import (
 
 
 @tensorleap_metadata("metadata_sample_index")
-def metadata_sample_index(idx: int, preprocess: PreprocessResponse) -> int:
-    return idx
+def metadata_sample_index(idx: str, preprocess: PreprocessResponse) -> int:
+    return _sample_index(idx)
 
 
 @tensorleap_metadata("image info a", metadata_type=possible_float_like_nan_types)
-def metadata_per_img(idx: int, data: PreprocessResponse) -> Dict[str, Union[str, int, float]]:
+def metadata_per_img(idx: str, data: PreprocessResponse) -> Dict[str, Union[str, int, float]]:
     nan_default_value = None
+    img_idx = _sample_index(idx)
     gt_data = gt_encoder(idx, data)
     cls_gt = np.expand_dims(gt_data[:, 4], axis=1)
     bbox_gt = gt_data[:, :4]
     clss_info = np.unique(cls_gt, return_counts=True)
     count_dict = update_dict_count_cls(all_clss, clss_info, nan_default_value)
     areas, _ = bbox_area_and_aspect_ratio(
-        bbox_gt, data.data["dataloader"][idx]["resized_shape"]
+        bbox_gt, data.data["dataloader"][img_idx]["resized_shape"]
     )
     occlusion_matrix, areas_in_pixels, _ = calculate_iou_all_pairs(
-        bbox_gt, data.data["dataloader"][idx]["resized_shape"]
+        bbox_gt, data.data["dataloader"][img_idx]["resized_shape"]
     )
     no_nans_values = ~np.isnan(clss_info[0]).any()
     metadata = {
-        "image path": data.data["dataloader"].im_files[idx],
-        "idx": idx,
+        "image path": data.data["dataloader"].im_files[img_idx],
+        "idx": img_idx,
         "# unique classes": len(clss_info[0]) if no_nans_values else nan_default_value,
         "# of objects": int(clss_info[1].sum()) if no_nans_values else nan_default_value,
         "mean bbox area": float(areas.mean()) if no_nans_values else nan_default_value,

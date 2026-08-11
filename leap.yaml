@@ -1,4 +1,4 @@
-projectId: 69b6b0d2daf1b26a708c401f
+projectId: 6a7881a36bd3e29d584ed588
 secretId: ""
 branch: master
 entryFile: leap_integration.py
@@ -12,6 +12,7 @@ include:
     - ultralytics/*.py
     - ultralytics/cfg/*.py
     - ultralytics/cfg/datasets/coco.yaml
+    - ultralytics/cfg/datasets/coco128.yaml
     - ultralytics/cfg/default.yaml
     - ultralytics/cfg/**/*.py
     - ultralytics/cfg/**/*.yaml

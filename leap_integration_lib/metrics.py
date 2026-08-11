@@ -8,6 +8,7 @@ from code_loader.inner_leap_binder.leapbinder_decorators import (
 )
 from ultralytics.utils.metrics import box_iou
 
+from leap_integration_lib.data import _sample_index
 from ultralytics.tensorleap_folder.global_params import (
     all_clss,
     cfg,
@@ -17,8 +18,52 @@ from ultralytics.tensorleap_folder.global_params import (
 )
 
 
+DEFAULT_CLASS_GROUPS = {
+    "pets": {"cat", "dog"},
+    "fruits": {"banana", "apple", "orange"},
+    "vegetables": {"broccoli", "carrot"},
+    "food": {"banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake"},
+    "home_appliances": {"microwave", "oven", "toaster", "sink", "refrigerator", "tv"},
+    "vehicles": {"bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat"},
+    "furniture": {"chair", "couch", "bed", "dining table", "toilet"},
+    "electronics": {"tv", "laptop", "mouse", "remote", "keyboard", "cell phone"},
+    "kitchenware": {"bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl"},
+    "wild_animals": {"bird", "elephant", "bear", "zebra", "giraffe"},
+    "farm_animals": {"horse", "sheep", "cow"},
+    "sports_equipment": {
+        "frisbee",
+        "skis",
+        "snowboard",
+        "sports ball",
+        "kite",
+        "baseball bat",
+        "baseball glove",
+        "skateboard",
+        "surfboard",
+        "tennis racket",
+    },
+}
+
+
+def _resolve_class_groups():
+    class_name_to_idx = {class_name: class_idx for class_idx, class_name in all_clss.items()}
+    resolved_groups = {}
+    for group_name, class_names in DEFAULT_CLASS_GROUPS.items():
+        class_ids = {
+            class_name_to_idx[class_name]
+            for class_name in class_names
+            if class_name in class_name_to_idx
+        }
+        if class_ids:
+            resolved_groups[group_name] = class_ids
+    return resolved_groups
+
+
+CLASS_GROUPS = _resolve_class_groups()
+
+
 def _prepare_detection_batch(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
-    batch = preprocess.preprocess_response.data["dataloader"][int(preprocess.sample_ids)]
+    batch = preprocess.preprocess_response.data["dataloader"][_sample_index(preprocess.sample_ids)]
     batch["imgsz"] = (batch["resized_shape"],)
     batch["ori_shape"] = (batch["ori_shape"],)
     batch["ratio_pad"] = (batch["ratio_pad"],)
@@ -141,6 +186,11 @@ SCORE_DIRECTIONS = {
         for class_name in all_clss.values()
         for metric in ("precision", "recall", "f1")
     },
+    **{
+        f"{metric}(group:{group_name})": MetricDirection.Upward
+        for group_name in CLASS_GROUPS
+        for metric in ("precision", "recall", "f1")
+    },
     **{f"{metric}(global)": MetricDirection.Upward for metric in ("precision", "recall", "f1")},
 }
 
@@ -156,6 +206,13 @@ def detection_scores(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
         for class_name in class_names
         for metric in ("precision", "recall", "f1")
     }
+    scores.update(
+        {
+            f"{metric}(group:{group_name})": default_value.copy()
+            for group_name in CLASS_GROUPS
+            for metric in ("precision", "recall", "f1")
+        }
+    )
     scores.update({f"{metric}(global)": default_value.copy() for metric in ("precision", "recall", "f1")})
 
     pred_gt_match, pred_is_tp, gt_is_detected = _match_detections(predn, cls, bbox, threshold)
@@ -190,6 +247,30 @@ def detection_scores(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
         scores[f"precision({class_name})"] = np.array([precision])
         scores[f"recall({class_name})"] = np.array([recall])
         scores[f"f1({class_name})"] = np.array([f1])
+
+    for group_name, group_class_ids in CLASS_GROUPS.items():
+        group_pred_mask = np.isin(pred_classes, list(group_class_ids))
+        group_gt_mask = np.isin(gt_classes, list(group_class_ids))
+        matched_group_gt = (
+            (pred_gt_match >= 0)
+            & group_pred_mask
+            & np.isin(gt_classes[np.clip(pred_gt_match, 0, None)], list(group_class_ids))
+        ) if len(pred_gt_match) else np.array([], dtype=bool)
+
+        group_tp = int(np.sum(matched_group_gt))
+        group_fp = int(np.sum(group_pred_mask) - group_tp)
+        detected_group_gt = np.zeros(len(gt_classes), dtype=bool)
+        if group_tp:
+            detected_group_gt[pred_gt_match[matched_group_gt]] = True
+        group_fn = int(np.sum(group_gt_mask & ~detected_group_gt))
+
+        precision = group_tp / (group_tp + group_fp) if group_tp + group_fp else np.nan
+        recall = group_tp / (group_tp + group_fn) if group_tp + group_fn else np.nan
+        f1 = 2 * precision * recall / (precision + recall) if not np.isnan(precision) and not np.isnan(recall) and (precision + recall) else np.nan
+
+        scores[f"precision(group:{group_name})"] = np.array([precision])
+        scores[f"recall(group:{group_name})"] = np.array([recall])
+        scores[f"f1(group:{group_name})"] = np.array([f1])
 
     return scores
 
