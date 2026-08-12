@@ -11,6 +11,7 @@ from code_loader.inner_leap_binder.leapbinder_decorators import (
     tensorleap_element_instance_preprocess,
     tensorleap_gt_encoder,
     tensorleap_input_encoder,
+    tensorleap_instance_custom_latent_space,
     tensorleap_instances_length_encoder,
     tensorleap_instances_masks_encoder,
 )
@@ -63,6 +64,19 @@ def instance_mask_encoder(
     mask = np.zeros(image.shape, dtype=np.float32)
     mask[..., y0 : max(y1, y0 + 1), x0 : max(x1, x0 + 1)] = 1.0
     return ElementInstance(name=all_clss.get(int(cls), "Unknown Class"), mask=mask)
+
+
+@tensorleap_instance_custom_latent_space(name="instance_bbox_appearance_ls")
+def instance_bbox_appearance_ls(
+    sample_id: str, preprocess: PreprocessResponse, instance_id: int
+) -> np.ndarray:
+    cx, cy, w, h, cls = _valid_gt_boxes(sample_id, preprocess)[instance_id]
+    image = input_encoder(sample_id, preprocess)
+    height, width = image.shape[-2], image.shape[-1]
+    x0, x1 = int(np.clip((cx - w / 2) * width, 0, width)), int(np.clip((cx + w / 2) * width, 0, width))
+    y0, y1 = int(np.clip((cy - h / 2) * height, 0, height)), int(np.clip((cy + h / 2) * height, 0, height))
+    crop = image[..., y0 : max(y1, y0 + 1), x0 : max(x1, x0 + 1)]
+    return np.array([cx, cy, w, h, float(crop.mean()), float(crop.std())], dtype=np.float32)
 
 
 @tensorleap_element_instance_preprocess(instance_length_encoder, instance_mask_encoder)
