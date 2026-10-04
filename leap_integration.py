@@ -16,6 +16,9 @@ from leap_integration_lib import (
     gt_encoder,
     image_visualizer,
     input_encoder,
+    instance_bbox_appearance_ls,
+    instance_confidence,
+    instance_iou,
     ious,
     loss,
     metadata_per_img,
@@ -54,6 +57,11 @@ def check_custom_test_mapping(idx, subset):
     # iou=ious(y_pred[0], s_prepro)
     # scores = detection_scores(y_pred[0], s_prepro)
     conf_mat = confusion_matrix_metric(y_pred[0], s_prepro)
+    # instance-aware custom LS: exercise the handler on the sample's first instance
+    instance_ls_vec = instance_bbox_appearance_ls(idx, subset, 0)
+    # per-instance metrics: one value per GT instance, keyed by instance number
+    instance_ious = instance_iou(y_pred[0], s_prepro)
+    instance_confs = instance_confidence(y_pred[0], s_prepro)
     # metadata
     meta_data=metadata_per_img(idx, subset)
     # vis

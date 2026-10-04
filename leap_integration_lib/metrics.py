@@ -3,6 +3,7 @@ import torch
 from code_loader.contract.datasetclasses import ConfusionMatrixElement, SamplePreprocessResponse
 from code_loader.contract.enums import ConfusionMatrixValue, MetricDirection
 from code_loader.inner_leap_binder.leapbinder_decorators import (
+    tensorleap_custom_instances_metric,
     tensorleap_custom_loss,
     tensorleap_custom_metric,
 )
@@ -62,13 +63,25 @@ def _resolve_class_groups():
 CLASS_GROUPS = _resolve_class_groups()
 
 
-def _prepare_detection_batch(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
-    batch = preprocess.preprocess_response.data["dataloader"][_sample_index(preprocess.sample_ids)]
+def _row_sample_ids(preprocess: SamplePreprocessResponse) -> np.ndarray:
+    """The batch's sample ids as a flat array — one entry per batch row."""
+    return np.asarray(preprocess.sample_ids).reshape(-1)
+
+
+def _n_rows(y_pred: np.ndarray) -> int:
+    return int(np.asarray(y_pred).shape[0])
+
+
+def _prepare_detection_batch(y_pred: np.ndarray, preprocess: SamplePreprocessResponse, row: int = 0):
+    """Per-ROW preparation: metrics receive the whole eval batch (B rows), so every consumer
+    loops rows and passes `row`; the default keeps single-sample callers working."""
+    sample_ids = _row_sample_ids(preprocess)
+    batch = preprocess.preprocess_response.data["dataloader"][_sample_index(sample_ids[row])]
     batch["imgsz"] = (batch["resized_shape"],)
     batch["ori_shape"] = (batch["ori_shape"],)
     batch["ratio_pad"] = (batch["ratio_pad"],)
     batch["img"] = batch["img"].unsqueeze(0)
-    pred = predictor.postprocess(torch.from_numpy(y_pred.copy()))[0]
+    pred = predictor.postprocess(torch.from_numpy(y_pred[row:row + 1].copy()))[0]
     predictor.seen = 0
     predictor.args.plots = False
     predictor.stats = {"tp": []}
@@ -114,16 +127,87 @@ def _match_detections(predn: torch.Tensor, cls: torch.Tensor, bbox: torch.Tensor
     return pred_gt_match, pred_is_tp, gt_is_detected
 
 
+def _match_pred_to_gt_instances(y_pred: np.ndarray, preprocess: SamplePreprocessResponse, row: int = 0):
+    """Greedy-match predictions to GT boxes, returning per-GT-instance IoU and confidence.
+
+    GT rows keep the dataloader order, which is the same order _valid_gt_boxes uses to derive
+    element-instance ids, so index i here is instance i.
+    """
+    _, cls_gt, boxes_gt, predn = _prepare_detection_batch(y_pred, preprocess, row)
+    n_gt = len(cls_gt)
+    iou_per_gt = np.zeros(n_gt, dtype=np.float32)
+    conf_per_gt = np.zeros(n_gt, dtype=np.float32)
+    if n_gt == 0 or len(predn) == 0:
+        return iou_per_gt, conf_per_gt
+    iou_mat = box_iou(boxes_gt, predn[:, :4]).numpy()
+    confidences = predn[:, 4].cpu().numpy()
+    used_gt = np.zeros(n_gt, dtype=bool)
+    for pred_idx in range(iou_mat.shape[1]):
+        gt_idx = int(np.argmax(iou_mat[:, pred_idx]))
+        if not used_gt[gt_idx]:
+            iou_per_gt[gt_idx] = iou_mat[gt_idx, pred_idx]
+            conf_per_gt[gt_idx] = confidences[pred_idx]
+            used_gt[gt_idx] = True
+    return iou_per_gt, conf_per_gt
+
+
+def _stacked_instance_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResponse,
+                             value_index: int):
+    """Batch-shape the per-instance values the engine expects: {instance_id: (B,) array},
+    entry [row] = that instance's value for the parent at batch row `row` (NaN where a row's
+    parent has fewer instances). The engine reads result[instance_id][batch_pos] per parent."""
+    rows = _n_rows(y_pred)
+    per_row = [_match_pred_to_gt_instances(y_pred, preprocess, row)[value_index]
+               for row in range(rows)]
+    max_instances = max((len(vals) for vals in per_row), default=0)
+    stacked = {}
+    for instance_id in range(max_instances):
+        column = np.full(rows, np.nan, dtype=np.float32)
+        for row, vals in enumerate(per_row):
+            if instance_id < len(vals):
+                column[row] = vals[instance_id]
+        stacked[instance_id] = column
+    return stacked
+
+
+@tensorleap_custom_instances_metric("instance_iou", direction=MetricDirection.Upward)
+def instance_iou(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
+    return _stacked_instance_metric(y_pred, preprocess, value_index=0)
+
+
+@tensorleap_custom_instances_metric("instance_confidence", direction=MetricDirection.Upward)
+def instance_confidence(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
+    return _stacked_instance_metric(y_pred, preprocess, value_index=1)
+
+
+def _criterion_for_row(pred80, pred40, pred20, gt, row: int):
+    """Run the YOLO criterion on one batch row (heads sliced to a 1-row batch)."""
+    # The platform stores tensors at float16 (and code-loader >= 1.0.205 feeds the
+    # same dtype locally); torch's CPU softmax has no Half kernel, so cast here.
+    pred80, pred40, pred20 = (np.asarray(p, dtype=np.float32) for p in (pred80, pred40, pred20))
+    gt = np.asarray(gt, dtype=np.float32)
+    gt_row = gt[row]
+    target = {}
+    target["bboxes"] = torch.from_numpy(gt_row[..., :4])
+    target["cls"] = torch.from_numpy(gt_row[..., 4])
+    target["batch_idx"] = torch.zeros_like(target["cls"])
+    y_pred_torch = [torch.from_numpy(s[row:row + 1]) for s in [pred80, pred40, pred20]]
+    return criterion(y_pred_torch, target)
+
+
 @tensorleap_custom_loss("total_loss")
 def loss(pred80, pred40, pred20, gt, demo_pred):
-    gt = np.squeeze(gt, axis=0)
-    target = {}
-    target["bboxes"] = torch.from_numpy(gt[..., :4])
-    target["cls"] = torch.from_numpy(gt[..., 4])
-    target["batch_idx"] = torch.zeros_like(target["cls"])
-    y_pred_torch = [torch.from_numpy(s) for s in [pred80, pred40, pred20]]
-    all_loss, _ = criterion(y_pred_torch, target)
-    return all_loss.unsqueeze(0).numpy()
+    per_row = [_criterion_for_row(pred80, pred40, pred20, gt, row)[0].numpy()
+               for row in range(_n_rows(gt))]
+    return np.stack(per_row, axis=0)
+
+
+def _batched_metric_dict(single_fn, y_pred, preprocess):
+    """Run a per-row metric over every batch row and stack its dict values to (B,) arrays —
+    the shape the engine unpacks per sample (metric_result[key][row])."""
+    per_row = [single_fn(y_pred, preprocess, row) for row in range(_n_rows(y_pred))]
+    return {key: np.concatenate([row_result[key] for row_result in per_row])
+            for key in per_row[0]}
 
 
 @tensorleap_custom_metric(
@@ -134,8 +218,12 @@ def loss(pred80, pred40, pred20, gt, demo_pred):
     },
 )
 def ious(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
+    return _batched_metric_dict(_ious_single, y_pred, preprocess)
+
+
+def _ious_single(y_pred: np.ndarray, preprocess: SamplePreprocessResponse, row: int):
     default_value = np.ones(1) * -1
-    _, cls_gt, boxes_gt, predn = _prepare_detection_batch(y_pred, preprocess)
+    _, cls_gt, boxes_gt, predn = _prepare_detection_batch(y_pred, preprocess, row)
     wanted_mask = np.isin(cls_gt.numpy(), np.array(list(wanted_cls_dic.values())))
     iou_dic = dict.fromkeys(wanted_cls_dic.keys(), default_value)
     if boxes_gt.shape[0] == 0 and predn.shape[0] == 0:
@@ -166,18 +254,13 @@ def ious(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
 
 @tensorleap_custom_metric("cost", direction=MetricDirection.Downward)
 def cost(pred80, pred40, pred20, gt):
-    gt = np.squeeze(gt, axis=0)
-    target = {}
-    target["bboxes"] = torch.from_numpy(gt[..., :4])
-    target["cls"] = torch.from_numpy(gt[..., 4])
-    target["batch_idx"] = torch.zeros_like(target["cls"])
-    y_pred_torch = [torch.from_numpy(s) for s in [pred80, pred40, pred20]]
-    _, loss_parts = criterion(y_pred_torch, target)
-    return {
-        "box": loss_parts[0].unsqueeze(0).numpy(),
-        "cls": loss_parts[1].unsqueeze(0).numpy(),
-        "dfl": loss_parts[2].unsqueeze(0).numpy(),
-    }
+    parts = {"box": [], "cls": [], "dfl": []}
+    for row in range(_n_rows(gt)):
+        _, loss_parts = _criterion_for_row(pred80, pred40, pred20, gt, row)
+        parts["box"].append(float(loss_parts[0]))
+        parts["cls"].append(float(loss_parts[1]))
+        parts["dfl"].append(float(loss_parts[2]))
+    return {key: np.asarray(values, dtype=np.float32) for key, values in parts.items()}
 
 
 SCORE_DIRECTIONS = {
@@ -197,8 +280,12 @@ SCORE_DIRECTIONS = {
 
 @tensorleap_custom_metric("Detection Scores", direction=SCORE_DIRECTIONS)
 def detection_scores(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
+    return _batched_metric_dict(_detection_scores_single, y_pred, preprocess)
+
+
+def _detection_scores_single(y_pred: np.ndarray, preprocess: SamplePreprocessResponse, row: int):
     default_value = np.ones(1) * np.nan
-    _, cls, bbox, predn = _prepare_detection_batch(y_pred, preprocess)
+    _, cls, bbox, predn = _prepare_detection_batch(y_pred, preprocess, row)
     threshold = cfg.iou
     class_names = list(all_clss.values())
     scores = {
@@ -277,9 +364,14 @@ def detection_scores(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
 
 @tensorleap_custom_metric("Confusion Matrix", direction=MetricDirection.Downward)
 def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResponse):
+    # one element-list per batch row — the engine consumes result[row] per sample
+    return [_confusion_matrix_single(y_pred, preprocess, row) for row in range(_n_rows(y_pred))]
+
+
+def _confusion_matrix_single(y_pred: np.ndarray, preprocess: SamplePreprocessResponse, row: int):
     threshold = cfg.iou
     confusion_matrix_elements = []
-    batch, cls, bbox, predn = _prepare_detection_batch(y_pred, preprocess)
+    batch, cls, bbox, predn = _prepare_detection_batch(y_pred, preprocess, row)
     if len(predn) != 0:
         ious_array = box_iou(bbox, predn[:, :4]).numpy().T
         prediction_detected = np.any((ious_array > threshold), axis=1)
@@ -329,4 +421,4 @@ def confusion_matrix_metric(y_pred: np.ndarray, preprocess: SamplePreprocessResp
                 float(0),
             )
         )
-    return [confusion_matrix_elements]
+    return confusion_matrix_elements
