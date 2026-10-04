@@ -1,10 +1,9 @@
-codeIntegrationId:
-projectId:
+projectId: ""
 secretId: ""
 branch: master
 entryFile: leap_integration.py
 include:
-    - leap_binder.py
+    - leap_integration_lib/*.py
     - leap_integration.py
     - requirements.txt
     - ultralytics/tensorleap_folder/utils.py
@@ -13,6 +12,7 @@ include:
     - ultralytics/*.py
     - ultralytics/cfg/*.py
     - ultralytics/cfg/datasets/coco.yaml
+    - ultralytics/cfg/datasets/coco128.yaml
     - ultralytics/cfg/default.yaml
     - ultralytics/cfg/**/*.py
     - ultralytics/cfg/**/*.yaml
