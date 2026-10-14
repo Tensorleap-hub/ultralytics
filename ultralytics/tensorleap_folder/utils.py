@@ -141,7 +141,8 @@ def get_dataset_split(phase, split_file):
         "val": data["val_idxs"],
         "test": data["test_idxs"],
         "train": data["train_labeled_idxs"],
-        "unlabeled": data["train_unlabeled_idxs"]
+        "unlabeled": data["train_unlabeled_idxs"],
+        "additional": data["additional_idxs"] if "additional_idxs" in data else [],
     }
     return [int(x) for x in d[phase]]
 

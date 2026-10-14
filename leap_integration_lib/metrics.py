@@ -187,6 +187,7 @@ def _criterion_for_row(pred80, pred40, pred20, gt, row: int):
     pred80, pred40, pred20 = (np.asarray(p, dtype=np.float32) for p in (pred80, pred40, pred20))
     gt = np.asarray(gt, dtype=np.float32)
     gt_row = gt[row]
+    gt_row = gt_row[~np.isnan(gt_row).any(axis=-1)]  # drop the padding rows
     target = {}
     target["bboxes"] = torch.from_numpy(gt_row[..., :4])
     target["cls"] = torch.from_numpy(gt_row[..., 4])

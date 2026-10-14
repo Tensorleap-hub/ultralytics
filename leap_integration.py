@@ -1,5 +1,5 @@
-import os
 from code_loader.contract.datasetclasses import SamplePreprocessResponse
+import os
 import onnxruntime as ort
 import numpy as np
 from ultralytics.tensorleap_folder.utils import validate_supported_models, set_leap_yaml2root
@@ -14,8 +14,10 @@ from leap_integration_lib import (
     detection_scores,
     gt_bb_decoder,
     gt_encoder,
+    image_appearance_ls,
     image_visualizer,
     input_encoder,
+    instance_box,
     instance_bbox_appearance_ls,
     instance_confidence,
     instance_iou,
@@ -46,32 +48,40 @@ def load_model():
 @tensorleap_integration_test()
 def check_custom_test_mapping(idx, subset):
     s_prepro = SamplePreprocessResponse(np.array(idx), subset)
-    image = input_encoder(idx, subset)
     model = load_model()
-    y_pred = model.run(None, {'images': image})
-    # get gt
+    image = input_encoder(idx, subset)
     gt = gt_encoder(idx, subset)
-    # custom metrics
-    total_loss=loss(y_pred[1],y_pred[2],y_pred[3],gt ,y_pred[0])
-    cost_dic=cost(y_pred[1],y_pred[2],y_pred[3],gt)
-    # iou=ious(y_pred[0], s_prepro)
-    # scores = detection_scores(y_pred[0], s_prepro)
-    conf_mat = confusion_matrix_metric(y_pred[0], s_prepro)
-    # instance-aware custom LS: exercise the handler on the sample's first instance
-    instance_ls_vec = instance_bbox_appearance_ls(idx, subset, 0)
-    # per-instance metrics: one value per GT instance, keyed by instance number
-    instance_ious = instance_iou(y_pred[0], s_prepro)
-    instance_confs = instance_confidence(y_pred[0], s_prepro)
-    # metadata
-    meta_data=metadata_per_img(idx, subset)
-    # vis
-    img_vis=image_visualizer(image)
-    pred_img=bb_decoder(image,y_pred[0])
-    gt_img = gt_bb_decoder(image, gt)
-    visualize(img_vis)
-    visualize(pred_img)
-    visualize(gt_img)
+    
+    # Inference
+    y_pred = model.run(None, {'images': image})
 
+    # Metrics
+    total_loss = loss(y_pred[1],y_pred[2],y_pred[3],gt,y_pred[0])  # Loss (Image level)
+    cost_dic = cost(y_pred[1],y_pred[2],y_pred[3],gt)              # Image level
+    # iou=ious(y_pred[0], s_prepro)                                 # Image level
+    # scores = detection_scores(y_pred[0], s_prepro)                # Image level
+    conf_mat = confusion_matrix_metric(y_pred[0], s_prepro)        # Image level
+    instance_ious = instance_iou(y_pred[0], s_prepro)              # Instance level
+    instance_confs = instance_confidence(y_pred[0], s_prepro)      # Instance level
+
+    # Metadata
+    meta_data = metadata_per_img(idx, subset)
+
+    # Custom LS
+    image_ls_vec = image_appearance_ls(idx, subset)                # Image level
+    instance_ls_vec = instance_bbox_appearance_ls(idx, subset, 0)  # instance level
+    
+    # Visualizer
+    img_vis = image_visualizer(image)
+    pred_img = bb_decoder(image,y_pred[0])
+    gt_img = gt_bb_decoder(image, gt)
+    instance_img = instance_box(image, s_prepro)
+    plot = False
+    if plot:
+        visualize(img_vis)
+        visualize(pred_img)
+        visualize(gt_img)
+        visualize(instance_img)
 
 
 if __name__ == '__main__':

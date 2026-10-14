@@ -7,7 +7,8 @@ task: detect # (str) YOLO task, i.e. detect, segment, classify, pose, obb
 mode: val # (str) YOLO mode, i.e. train, val, predict, export, track, benchmark
 tensorleap_path: /Users/nettashaf/tensorleap/data  #folder where coco dataset folder will be created --TENSORLEAP FLAG
 tensorleap_use_test: False
-tensorleap_use_unlabeled: False
+tensorleap_use_unlabeled: True
+tensorleap_use_additional: True # an `additional` split returned from the main preprocess (labeled, with instances)
 max_samples: 48 # (int, optional) limit Tensorleap to the first N samples per phase
 # Train settings -------------------------------------------------------------------------------------------------------
 model: yolo11s.pt  # set to the core of your.h5 model

@@ -9,6 +9,7 @@ from code_loader.contract.datasetclasses import (
 )
 from code_loader.contract.enums import DatasetMetadataType
 from code_loader.inner_leap_binder.leapbinder_decorators import (
+    tensorleap_custom_latent_space,
     tensorleap_element_instance_preprocess,
     tensorleap_gt_encoder,
     tensorleap_input_encoder,
@@ -44,8 +45,10 @@ def _sample_index(sample_id) -> int:
 
 
 def _valid_gt_boxes(sample_id, preprocess: PreprocessResponse) -> np.ndarray:
-    gt = gt_encoder(sample_id, preprocess)
-    return gt[~np.isnan(gt).any(axis=1)]
+    """The image's instances: its complete annotation rows, in GT order (capped like the GT), in
+    every split -- the unlabeled one included, whose ground truth is empty."""
+    rows = _annotation_rows(sample_id, preprocess)[:MAX_GT_BOXES]
+    return rows[~np.isnan(rows).any(axis=1)]
 
 
 @tensorleap_instances_length_encoder("image")
@@ -99,6 +102,17 @@ def instance_bbox_appearance_ls(
     return np.array([cx, cy, w, h, float(crop.mean()), float(crop.std())], dtype=np.float32)
 
 
+@tensorleap_custom_latent_space(name="image_appearance_ls")
+def image_appearance_ls(sample_id: str, preprocess: PreprocessResponse) -> np.ndarray:
+    """Image-level custom LS, next to the per-instance one above: the image's per-channel
+    brightness mean and std, its GT box count and mean box area (normalized)."""
+    image = input_encoder(sample_id, preprocess)
+    boxes = _valid_gt_boxes(sample_id, preprocess)
+    mean_area = float((boxes[:, 2] * boxes[:, 3]).mean()) if len(boxes) else 0.0
+    return np.concatenate([image.mean(axis=(-2, -1)), image.std(axis=(-2, -1)),
+                           [float(len(boxes)), mean_area]]).astype(np.float32)
+
+
 # Declaring the types (code-loader >= 1.0.206) makes the columns independent of
 # probing: a key stays typed even when the first probed instance lacks a value.
 INSTANCE_METADATA_TYPES = {
@@ -127,6 +141,9 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
     if cfg.tensorleap_use_unlabeled:
         phases.append("unlabeled")
         dataset_types.append(DataStateType.unlabeled)
+    if getattr(cfg, "tensorleap_use_additional", False):
+        phases.append("additional")
+        dataset_types.append(DataStateType.additional)
     for phase, dataset_type in zip(phases, dataset_types):
         data_loader, n_samples = create_data_with_ult(cfg, yolo_data, phase=phase)
         sample_ids = (
@@ -154,10 +171,17 @@ def input_encoder(idx: str, preprocess: PreprocessResponse) -> np.ndarray:
     return imgs.astype("float32")
 
 
-@tensorleap_gt_encoder("classes")
-def gt_encoder(idx: str, preprocessing: PreprocessResponse) -> np.ndarray:
+def _gt_rows(idx: str, preprocessing: PreprocessResponse) -> np.ndarray:
+    """The ground truth: the annotation rows, none (a single NaN row) for the unlabeled split."""
     if preprocessing.state == DataStateType.unlabeled:
         return np.full((1, 5), np.nan, dtype=np.float32)
+    return _annotation_rows(idx, preprocessing)
+
+
+def _annotation_rows(idx: str, preprocessing: PreprocessResponse) -> np.ndarray:
+    """One row per annotated box, [cx, cy, w, h, cls], in every split; a single NaN row when the
+    image has none. The instances are these boxes, so the unlabeled split has instances too (its
+    images keep their label files here) while its ground truth stays empty."""
     _, clss, bboxes, _ = pre_process_dataloader(preprocessing, _sample_index(idx), predictor)
     if clss.shape[0] == 0 and bboxes.shape[0] == 0:
         return np.full((1, 5), np.nan, dtype=np.float32)
@@ -170,3 +194,16 @@ def gt_encoder(idx: str, preprocessing: PreprocessResponse) -> np.ndarray:
         temp_array[:, 4] = clss
         return temp_array
     return np.concatenate([bboxes, clss], axis=1)
+
+
+# COCO's busiest image has 90 boxes. A fixed GT shape lets the engine batch samples together.
+MAX_GT_BOXES = 100
+
+
+@tensorleap_gt_encoder("classes")
+def gt_encoder(idx: str, preprocessing: PreprocessResponse) -> np.ndarray:
+    """(MAX_GT_BOXES, 5); rows past the image's boxes are NaN."""
+    rows = _gt_rows(idx, preprocessing)[:MAX_GT_BOXES]
+    padded = np.full((MAX_GT_BOXES, 5), np.nan, dtype=np.float32)
+    padded[:len(rows)] = rows
+    return padded

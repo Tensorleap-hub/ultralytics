@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from code_loader.contract.datasetclasses import SamplePreprocessResponse
 from code_loader.contract.enums import LeapDataType
 from code_loader.contract.responsedataclasses import BoundingBox
 from code_loader.contract.visualizer_classes import LeapImageWithBBox
@@ -8,6 +9,7 @@ from code_loader.utils import rescale_min_max
 from code_loader.visualizers.default_visualizers import LeapImage
 from ultralytics.utils.plotting import output_to_target
 
+from leap_integration_lib.data import _valid_gt_boxes
 from ultralytics.tensorleap_folder.global_params import all_clss, cfg, predictor
 
 
@@ -23,6 +25,7 @@ def gt_bb_decoder(image: np.ndarray, bb_gt: np.ndarray) -> LeapImageWithBBox:
             label=all_clss.get(int(bbx[4]) if not np.isnan(bbx[4]) else -1, "Unknown Class"),
         )
         for bbx in bb_gt.squeeze(0)
+        if not np.isnan(bbx).any()  # padding rows
     ]
     image = rescale_min_max(image.squeeze(0))
     return LeapImageWithBBox(data=image.transpose(1, 2, 0), bounding_boxes=bbox)
@@ -58,4 +61,30 @@ def bb_decoder(image: np.ndarray, predictions: np.ndarray) -> LeapImageWithBBox:
         for bbx in post_proc_pred
     ]
     image = rescale_min_max(image)
+    return LeapImageWithBBox(data=image.transpose(1, 2, 0), bounding_boxes=bbox)
+
+
+@tensorleap_custom_visualizer("instance_box", LeapDataType.ImageWithBBox)
+def instance_box(image: np.ndarray, preprocess: SamplePreprocessResponse) -> LeapImageWithBBox:
+    """An instance row: the (parent) frame with only this instance's GT box. An image row: all its GT boxes.
+
+    The row is resolved through code-loader's instance mappings, not by parsing its id, and the
+    instance's position follows the same `_valid_gt_boxes` order as the instance mask encoder.
+    """
+    sample_id = str(np.atleast_1d(preprocess.sample_ids)[0])
+    response = preprocess.preprocess_response
+    parent = (response.instance_to_sample_ids_mappings or {}).get(sample_id)
+    if parent is None:
+        boxes = _valid_gt_boxes(sample_id, response)
+    else:
+        position = [str(i) for i in response.sample_ids_to_instance_mappings[parent]].index(sample_id)
+        boxes = _valid_gt_boxes(parent, response)[position:position + 1]
+    bbox = [
+        BoundingBox(
+            x=bbx[0], y=bbx[1], width=bbx[2], height=bbx[3], confidence=1,
+            label=all_clss.get(int(bbx[4]), "Unknown Class"),
+        )
+        for bbx in boxes
+    ]
+    image = rescale_min_max(image.squeeze(0))
     return LeapImageWithBBox(data=image.transpose(1, 2, 0), bounding_boxes=bbox)

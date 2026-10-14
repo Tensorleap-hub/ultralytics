@@ -1,4 +1,4 @@
-from .data import gt_encoder, input_encoder, instance_bbox_appearance_ls, preprocess_func_leap
+from .data import gt_encoder, image_appearance_ls, input_encoder, instance_bbox_appearance_ls, preprocess_func_leap
 from .metadata import metadata_per_img
 from .metrics import (
     confusion_matrix_metric,
@@ -9,7 +9,7 @@ from .metrics import (
     ious,
     loss,
 )
-from .visualizers import bb_decoder, gt_bb_decoder, image_visualizer
+from .visualizers import bb_decoder, gt_bb_decoder, image_visualizer, instance_box
 
 __all__ = [
     "bb_decoder",
@@ -18,8 +18,10 @@ __all__ = [
     "detection_scores",
     "gt_bb_decoder",
     "gt_encoder",
+    "image_appearance_ls",
     "image_visualizer",
     "input_encoder",
+    "instance_box",
     "instance_bbox_appearance_ls",
     "instance_confidence",
     "instance_iou",

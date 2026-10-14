@@ -4,7 +4,7 @@ import numpy as np
 from code_loader.contract.datasetclasses import PreprocessResponse
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_metadata
 
-from leap_integration_lib.data import _sample_index, gt_encoder
+from leap_integration_lib.data import _gt_rows, _sample_index
 from ultralytics.tensorleap_folder.global_params import (
     all_clss,
     possible_float_like_nan_types,
@@ -25,7 +25,7 @@ def metadata_sample_index(idx: str, preprocess: PreprocessResponse) -> int:
 def metadata_per_img(idx: str, data: PreprocessResponse) -> Dict[str, Union[str, int, float]]:
     nan_default_value = None
     img_idx = _sample_index(idx)
-    gt_data = gt_encoder(idx, data)
+    gt_data = _gt_rows(idx, data)  # the image's own rows, not the padded GT
     cls_gt = np.expand_dims(gt_data[:, 4], axis=1)
     bbox_gt = gt_data[:, :4]
     clss_info = np.unique(cls_gt, return_counts=True)
