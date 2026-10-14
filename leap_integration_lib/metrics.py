@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from code_loader.contract.datasetclasses import ConfusionMatrixElement, SamplePreprocessResponse
+from code_loader.contract.datasetclasses import ConfusionMatrixElement, DataStateType, SamplePreprocessResponse
 from code_loader.contract.enums import ConfusionMatrixValue, MetricDirection
 from code_loader.inner_leap_binder.leapbinder_decorators import (
     tensorleap_custom_instances_metric,
@@ -137,6 +137,10 @@ def _match_pred_to_gt_instances(y_pred: np.ndarray, preprocess: SamplePreprocess
     n_gt = len(cls_gt)
     iou_per_gt = np.zeros(n_gt, dtype=np.float32)
     conf_per_gt = np.zeros(n_gt, dtype=np.float32)
+    if preprocess.preprocess_response.state == DataStateType.unlabeled:
+        # The unlabeled split has instances (its annotation boxes) but no ground truth to score them
+        # against: one NaN per instance keeps the positions aligned with the instances.
+        return np.full(n_gt, np.nan, dtype=np.float32), np.full(n_gt, np.nan, dtype=np.float32)
     if n_gt == 0 or len(predn) == 0:
         return iou_per_gt, conf_per_gt
     iou_mat = box_iou(boxes_gt, predn[:, :4]).numpy()
