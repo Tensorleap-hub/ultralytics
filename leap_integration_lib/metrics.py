@@ -377,6 +377,10 @@ def _confusion_matrix_single(y_pred: np.ndarray, preprocess: SamplePreprocessRes
     threshold = cfg.iou
     confusion_matrix_elements = []
     batch, cls, bbox, predn = _prepare_detection_batch(y_pred, preprocess, row)
+    if len(predn) != 0 and len(bbox) == 0:
+        # No ground truth (an image without labels): every prediction is a false positive.
+        return [ConfusionMatrixElement(f"{all_clss.get(int(p[5]))}", ConfusionMatrixValue.Negative, float(p[4]))
+                for p in predn]
     if len(predn) != 0:
         ious_array = box_iou(bbox, predn[:, :4]).numpy().T
         prediction_detected = np.any((ious_array > threshold), axis=1)
