@@ -26,8 +26,13 @@ from ultralytics.tensorleap_folder.utils import (
 )
 
 
-def _limit_sample_ids(sample_ids):
-    max_samples = getattr(cfg, "max_samples", None)
+def _limit_sample_ids(sample_ids, phase):
+    """The first `max_samples` ids of a phase. `skip_samples_<phase>` drops ids from its start and
+    `max_samples_<phase>` overrides the cap for that phase alone, so phases that read the same image
+    folder (train / unlabeled / additional on train2017) can take disjoint windows of it."""
+    skip = int(getattr(cfg, f"skip_samples_{phase}", 0) or 0)
+    max_samples = getattr(cfg, f"max_samples_{phase}", None) or getattr(cfg, "max_samples", None)
+    sample_ids = sample_ids[skip:]
     if max_samples is None:
         return sample_ids
     return sample_ids[: int(max_samples)]
@@ -156,7 +161,7 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
         )
         responses.append(
             PreprocessResponse(
-                sample_ids=[str(i) for i in _limit_sample_ids(sample_ids)],
+                sample_ids=[str(i) for i in _limit_sample_ids(sample_ids, phase)],
                 data={"dataloader": data_loader},
                 sample_id_type=str,
                 state=dataset_type,
