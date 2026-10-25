@@ -9,7 +9,8 @@ from code_loader.utils import rescale_min_max
 from code_loader.visualizers.default_visualizers import LeapImage
 from ultralytics.utils.plotting import output_to_target
 
-from leap_integration_lib.data import _valid_gt_boxes
+from leap_integration_lib.data import _bbox_pixel_bounds, _valid_gt_boxes
+from leap_integration_lib.false_positives import false_positive_boxes
 from ultralytics.tensorleap_folder.global_params import all_clss, cfg, predictor
 
 
@@ -88,3 +89,41 @@ def instance_box(image: np.ndarray, preprocess: SamplePreprocessResponse) -> Lea
     ]
     image = rescale_min_max(image.squeeze(0))
     return LeapImageWithBBox(data=image.transpose(1, 2, 0), bounding_boxes=bbox)
+
+
+def _false_positive_row(sample_id: str):
+    """(image id, k) for an engine false-positive row `<image>_fp_<k>`; None for any other row."""
+    image_id, sep, k = sample_id.rpartition("_fp_")
+    return (image_id, int(k)) if sep and image_id and k.isdigit() else None
+
+
+@tensorleap_custom_visualizer("instance_crop", LeapDataType.Image)
+def instance_crop(image: np.ndarray, predictions: np.ndarray,
+                  preprocess: SamplePreprocessResponse) -> LeapImage:
+    """Only the instance: the frame cropped to this row's box.
+
+    A GT instance row uses its GT box, resolved like instance_box. A false-positive row
+    (`<image>_fp_<k>`) is not in code-loader's instance mappings, so its box is recomputed from the
+    row's predictions -- its image's -- with the same false_positive_boxes the FP encoder uses, and
+    entry k is taken. An image row, or an FP whose box cannot be recomputed, shows the whole frame.
+    """
+    frame = image.squeeze(0)
+    height, width = frame.shape[-2], frame.shape[-1]
+    sample_id = str(np.atleast_1d(preprocess.sample_ids)[0])
+    response = preprocess.preprocess_response
+    x0, x1, y0, y1 = 0, width, 0, height
+    fp_row = _false_positive_row(sample_id)
+    parent = (response.instance_to_sample_ids_mappings or {}).get(sample_id)
+    if fp_row is not None:
+        image_id, k = fp_row
+        boxes = false_positive_boxes(image_id, response, predictions[0], width, height)
+        if k < len(boxes):
+            x0, x1, y0, y1 = boxes[k]["x0"], boxes[k]["x1"], boxes[k]["y0"], boxes[k]["y1"]
+    elif parent is not None:
+        position = [str(i) for i in response.sample_ids_to_instance_mappings[parent]].index(sample_id)
+        cx, cy, w, h, _ = _valid_gt_boxes(parent, response)[position]
+        x0, x1, y0, y1 = _bbox_pixel_bounds(frame, cx, cy, w, h)
+        x0, y0 = min(x0, width - 1), min(y0, height - 1)  # a box at the far edge keeps one pixel
+        x1, y1 = max(x1, x0 + 1), max(y1, y0 + 1)
+    crop = rescale_min_max(frame[:, y0:y1, x0:x1])
+    return LeapImage(crop.transpose(1, 2, 0), compress=False)
