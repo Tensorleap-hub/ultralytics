@@ -5,6 +5,7 @@ import numpy as np
 from ultralytics.tensorleap_folder.utils import validate_supported_models, set_leap_yaml2root
 from ultralytics.tensorleap_folder.global_params import cfg, all_clss
 from code_loader.plot_functions.visualize import visualize
+from code_loader.plot_functions.plot_functions import run_only_on_non_mapping_mode
 from code_loader.contract.datasetclasses import PredictionTypeHandler
 from code_loader.inner_leap_binder.leapbinder_decorators import tensorleap_load_model, tensorleap_integration_test
 from leap_integration_lib import (
@@ -12,12 +13,16 @@ from leap_integration_lib import (
     confusion_matrix_metric,
     cost,
     detection_scores,
+    false_positive_empty_gt,
+    false_positive_instances,
+    fp_bbox_appearance_ls,
     gt_bb_decoder,
     gt_encoder,
     image_appearance_ls,
     image_visualizer,
     input_encoder,
     instance_box,
+    instance_crop,
     instance_bbox_appearance_ls,
     instance_confidence,
     instance_iou,
@@ -45,6 +50,16 @@ def load_model():
     return model
 
 
+@run_only_on_non_mapping_mode()
+def check_false_positives(idx, subset, detection_pred):
+    """The engine calls these per sample with that sample's predictions (keyed by prediction-type
+    name, batch axis removed), and the empty GT and custom LS for each FP row."""
+    fp_instances = false_positive_instances(idx, subset, {prediction_type1.name: detection_pred[0]})
+    false_positive_empty_gt(idx, subset)
+    if fp_instances:
+        fp_bbox_appearance_ls(idx, subset, fp_instances[0])
+
+
 @tensorleap_integration_test()
 def check_custom_test_mapping(idx, subset):
     s_prepro = SamplePreprocessResponse(np.array(idx), subset)
@@ -64,6 +79,9 @@ def check_custom_test_mapping(idx, subset):
     instance_ious = instance_iou(y_pred[0], s_prepro)              # Instance level
     instance_confs = instance_confidence(y_pred[0], s_prepro)      # Instance level
 
+    # False positives (not graph nodes, so skipped while the mapping is recorded)
+    check_false_positives(idx, subset, y_pred[0])
+
     # Metadata
     meta_data = metadata_per_img(idx, subset)
 
@@ -76,12 +94,14 @@ def check_custom_test_mapping(idx, subset):
     pred_img = bb_decoder(image,y_pred[0])
     gt_img = gt_bb_decoder(image, gt)
     instance_img = instance_box(image, s_prepro)
+    instance_crop_img = instance_crop(image, y_pred[0], s_prepro)
     plot = False
     if plot:
         visualize(img_vis)
         visualize(pred_img)
         visualize(gt_img)
         visualize(instance_img)
+        visualize(instance_crop_img)
 
 
 if __name__ == '__main__':

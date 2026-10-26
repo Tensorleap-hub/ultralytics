@@ -68,6 +68,13 @@ def _bbox_pixel_bounds(image: np.ndarray, cx: float, cy: float, w: float, h: flo
     return x0, max(x1, x0 + 1), y0, max(y1, y0 + 1)
 
 
+def _bbox_appearance_vector(image: np.ndarray, cx: float, cy: float, w: float, h: float,
+                            x0: int, x1: int, y0: int, y1: int) -> np.ndarray:
+    """The instance LS vector [cx, cy, w, h (normalized), crop mean, crop std] for the pixel crop."""
+    crop = image[..., y0:y1, x0:x1]
+    return np.array([cx, cy, w, h, float(crop.mean()), float(crop.std())], dtype=np.float32)
+
+
 @tensorleap_instances_masks_encoder("image")
 def instance_mask_encoder(
     sample_id: str, preprocess: PreprocessResponse, instance_id: int
@@ -103,8 +110,7 @@ def instance_bbox_appearance_ls(
     cx, cy, w, h, cls = _valid_gt_boxes(sample_id, preprocess)[instance_id]
     image = input_encoder(sample_id, preprocess)
     x0, x1, y0, y1 = _bbox_pixel_bounds(image, cx, cy, w, h)
-    crop = image[..., y0:y1, x0:x1]
-    return np.array([cx, cy, w, h, float(crop.mean()), float(crop.std())], dtype=np.float32)
+    return _bbox_appearance_vector(image, cx, cy, w, h, x0, x1, y0, y1)
 
 
 @tensorleap_custom_latent_space(name="image_appearance_ls")
