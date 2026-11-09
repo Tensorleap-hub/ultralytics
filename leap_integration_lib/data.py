@@ -3,11 +3,12 @@ from typing import List
 
 import numpy as np
 from code_loader.contract.datasetclasses import (
+    FoundationInput,
     DataStateType,
     ElementInstance,
     PreprocessResponse,
 )
-from code_loader.contract.enums import DatasetMetadataType
+from code_loader.contract.enums import DatasetMetadataType, ImageRange
 from code_loader.inner_leap_binder.leapbinder_decorators import (
     tensorleap_custom_latent_space,
     tensorleap_element_instance_preprocess,
@@ -176,7 +177,8 @@ def preprocess_func_leap() -> List[PreprocessResponse]:
     return responses
 
 
-@tensorleap_input_encoder("image", channel_dim=1)
+# Foundation latent spaces (code-loader >= 1.0.219): YOLO feeds RGB in [0, 1] (/255), so range=UNIT.
+@tensorleap_input_encoder("image", channel_dim=1, foundation=FoundationInput(range=ImageRange.UNIT, rgb_channels=(0, 1, 2)))
 def input_encoder(idx: str, preprocess: PreprocessResponse) -> np.ndarray:
     imgs, _, _, _ = pre_process_dataloader(preprocess, _sample_index(idx), predictor)
     return imgs.astype("float32")
